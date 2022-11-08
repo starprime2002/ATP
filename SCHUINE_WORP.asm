@@ -202,3 +202,5 @@ UDATASEG
 STACK 100h
 
 END start
+
+; here is a comment
