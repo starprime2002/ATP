@@ -13,96 +13,124 @@ P386
 MODEL FLAT, C
 ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
+; Screen constants
+VMEMADR EQU 0A0000h	; video memory address
+SCRWIDTH EQU 320	; screen witdth
+SCRHEIGHT EQU 200	; screen height
+
 ; -------------------------------------------------------------------
 ; CODE
 ; -------------------------------------------------------------------
 CODESEG
 
-; Wait for a keystroke.
-PROC waitForKeystroke
+; Set the video mode
+PROC setVideoMode
+	ARG 	@@VM:byte
+	USES 	eax
+
+	movzx ax,[@@VM]
+	int 10h
+
+	ret
+ENDP setVideoMode
+
+; Wait for a specific keystroke.
+PROC waitForSpecificKeystroke
 	ARG 	@@key:byte
 	USES 	eax
-	
-	mov	ah,00h
-	int	16h
+
+	@@waitForKeystroke:
+		mov	ah,00h
+		int	16h
+		cmp	al,[@@key]
+	jne	@@waitForKeystroke ; if the key u pressed is not @@key (hier ESC= 001Bh), dan zal het niet terminateProcess
+
 	ret
-ENDP waitForKeystroke
+ENDP waitForSpecificKeystroke
 
 ; Terminate the program.
 PROC terminateProcess
 	USES eax
+	call setVideoMode, 03h
 	mov	ax,04C00h
 	int 21h
 	ret
 ENDP terminateProcess
 
-PROC cos 							;taylorbenadering cosinus
-	ARG @@hoek:dword RETURNS ecx
-	USES eax, ebx, edx
 
-	mov ecx, 1						;cos(x) = 1 - x*x/2 + x*x*x*x/24 
+;PROC cos 							;taylorbenadering cosinus
+;	ARG @@hoek:dword RETURNS ecx
+;	USES eax, ebx, edx
+;
+;	mov ecx, 1						;cos(x) = 1 - x*x/2 + x*x*x*x/24 
+;
+;	mov eax, [@@hoek]
+;	mul eax
+;	mul eax
+;	mul eax
+;	mov ebx, 24
+;	div ebx
+;	add ecx, eax
+;
+;	mov eax, [@@hoek]
+;	mul eax
+;	mov ebx, 2
+;	div ebx
+;	sub ecx, eax
+;		
+;	ret
+;ENDP cos	
 
-	mov eax, [@@hoek]
-	mul eax
-	mul eax
-	mul eax
-	mov ebx, 24
-	div ebx
-	add ecx, eax
+;PROC landingshoogte
+;	ARG @@alpha:dword, @@v0:dword RETURNS eax
+;	LOCAL @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword 
+;	USES ebx
+;
+;	;vx
+;	call cos, [@@alpha]	       ;retwaarde is in ecx
+;	mov eax, ecx
+;	mov ebx, [@@v0]
+;	mul ebx, 
+;	mov [@@vx], eax
+;
+;	;vy
+;	mov ebx, [@@alpha]			; sin(hoek) = cos(hoek - pi/2)
+;	sub ebx, 1.570796
+;	call cos, ebx	       
+;	mov eax, ecx
+;	mov ebx, [@@v0]
+;	mul ebx, 
+;	mov [@@vy], eax
 
-	mov eax, [@@hoek]
-	mul eax
-	mov ebx, 2
-	div ebx
-	sub ecx, eax
-		
-	ret
-ENDP cos	
+	;ax
+;	call cos, hoekwind
+;	mov eax, ecx
+;	mov ebx, krachtwind
+;	mul ebx
+;	mov ebx, massa
+;	div ebx
+;	mov [@@ax], eax
 
-PROC landingshoogte
-	ARG @@alpha:dword, @@v0:dword RETURNS eax
-	LOCAL @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword 
-	USES ebx
+	;ay
+;	mov ebx, hoekwind
+;	sub ebx, 1.570796
+;	call cos, ebx
+;	mov eax, ecx
+;	mov ebx, krachtwind
+;	mul ebx
+;	mov ebx, massa
+;	div ebx
+;	sub eax, g
+;	mov [@@ay], eax
 
-	call cos, [@@alpha]	       ;retwaarde is in ecx
-	mov eax, ecx
-	mov ebx, [@@v0]
-	mul ebx, 
-	mov [@@vx], eax
 
-	mov ebx, [@@alpha]			; sin(hoek) = cos(hoek - pi/2)
-	sub ebx, 1.570796
-	call cos, ebx	       
-	mov eax, ecx
-	mov ebx, [@@v0]
-	mul ebx, 
-	mov [@@vy], eax
-
-	call cos, hoekwind
-	mov eax, ecx
-	mov ebx, krachtwind
-	mul ebx
-	mov ebx, massa
-	div ebx
-	mov [@@ax], eax
-
-	mov ebx, hoekwind
-	sub ebx, 1.570796
-	call cos, ebx
-	mov eax, ecx
-	mov ebx, krachtwind
-	mul ebx
-	mov ebx, massa
-	div ebx
-	sub eax, g
-	mov [@@ay], eax
 
 
 	
 	
-	ret
+;	ret
 
-ENDP landingshoogte
+;ENDP landingshoogte
 
 PROC printUnsignedInteger
 	ARG	@@printval:dword    ; input argument
@@ -133,14 +161,87 @@ PROC printUnsignedInteger
 ENDP printUnsignedInteger
 
 
+
+
+; Fill the background (for mode 13h): blue sky with grass
+
+PROC fillBackground
+	USES 	eax, ecx, edi, edx, ebx
+
+	; Initialize video memory address.
+	mov	edi, VMEMADR ; edi is destination adress en is dus hier 0A0000h
+
+
+	; lucht tekenen
+	; Scan the whole video memory and assign the background colour.
+	mov	ecx, SCRWIDTH*150 ; ecx = amount of elements = aantal pixels
+	mov	al,100	; indx of the first color to change
+	rep	stosb			; stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
+						;stosw (word) = transfer two byte (= word)
+						;stosd (double word) = tranfer 4 bytes (= double word)
+
+	;gras tekenen
+	mov	edi, VMEMADR
+	add edi, 150*320
+	mov al, 50
+
+	mov edx, 50
+	@@hoogte:
+		mov ecx, 320
+		@@breedte:
+			mov [edi], al
+			inc edi
+			dec ecx
+			cmp ecx, 0
+			jne @@breedte
+		dec edx
+		cmp edx, 0
+		jne @@hoogte
+
+	;muur tekenen
+	mov edx, 1
+	@@hoogtemuur:
+		xor ebx, ebx	
+		mov ebx, 50
+		add ebx, edx
+		mov eax, 320
+		mul ebx
+		mov ebx, eax
+		add ebx, 249
+		mov	edi, VMEMADR
+		add edi, ebx
+		mov al, 142
+		mov ecx, 20
+			@@breedtemuur:
+				mov [edi], al
+				inc edi
+				dec ecx
+				cmp ecx, 0
+				jne @@breedtemuur
+		inc edx
+		cmp edx, 3
+		jne @@hoogtemuur
+
+	ret
+ENDP fillBackground
+
+
+
+
+
 PROC main
 	sti
 	cld
 	
-	call    cos, 1	
-	call printUnsignedInteger, ecx
+	push ds
+	pop	es
 
-	call 	waitForKeystroke
+	call	setVideoMode, 13h
+	finit	; initialize FPU
+	;call    cos, 1	
+	;call printUnsignedInteger, ecx
+	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
+	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
 ENDP main
 ; -------------------------------------------------------------------
@@ -164,3 +265,4 @@ STACK 100h
 END main
 
 ; here is a comment heehekbeb
+
