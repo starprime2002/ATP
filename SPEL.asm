@@ -37,16 +37,42 @@ PROC terminateProcess
 ENDP terminateProcess
 
 PROC landingshoogte
-	ARG @@alpha: dword, @@v0: dword 
-	RETURNS eax
+	ARG @@alpha: dword, @@v0: dword RETURNS eax
 	LOCAL @@vx: dword, @@vy: dword, @@ax: dword, @@ay: dword 
-	USES 
+	USES ebx
 
-	mov eax, 1
+	mov eax, 128827
 	ret
 
 ENDP landingshoogte
 
+PROC printUnsignedInteger
+	ARG	@@printval:dword    ; input argument
+	USES eax, ebx, ecx, edx
+
+	mov eax, [@@printval]
+	mov	ebx, 10		; divider
+	xor ecx, ecx	; counter for digits to be printed
+
+	; Store digits on stack
+@@getNextDigit:
+	inc	ecx         ; increase digit counter
+	xor edx, edx
+	div	ebx   		; divide by 10
+	push dx			; store remainder on stack
+	test eax, eax	; check whether zero?
+	jnz	@@getNextDigit
+
+    ; Write all digits to the standard output
+	mov	ah, 2h 		; Function for printing single characters.
+@@printDigits:		
+	pop dx
+	add	dl,'0'      	; Add 30h => code for a digit in the ASCII table, ...
+	int	21h            	; Print the digit to the screen, ...
+	loop @@printDigits	; Until digit counter = 0.
+	
+	ret
+ENDP printUnsignedInteger
 
 
 PROC main
@@ -54,7 +80,8 @@ PROC main
 	cld
 	
 
-		
+	call	landingshoogte, 1, 1
+	call printUnsignedInteger, eax
 	call 	waitForKeystroke
 	call	terminateProcess
 ENDP main
@@ -76,6 +103,6 @@ DATASEG
 ; -------------------------------------------------------------------
 STACK 100h
 
-END start
+END main
 
 ; here is a comment heehekbeb
