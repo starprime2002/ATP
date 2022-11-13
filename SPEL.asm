@@ -59,21 +59,50 @@ PROC cos 							;taylorbenadering cosinus
 	ret
 ENDP cos	
 
-;PROC landingshoogte
-;	ARG @@alpha: dword, @@v0: dword RETURNS eax
-;	LOCAL @@vx: dword, @@vy: dword, @@ax: dword, @@ay: dword 
-;	USES ebx
-;
-;	mov ebx, [@@v0]
-;	mov ecx, cos(@@alpha)
-;	mul ebx, 
-;
+PROC landingshoogte
+	ARG @@alpha:dword, @@v0:dword RETURNS eax
+	LOCAL @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword 
+	USES ebx
+
+	call cos, [@@alpha]	       ;retwaarde is in ecx
+	mov eax, ecx
+	mov ebx, [@@v0]
+	mul ebx, 
+	mov [@@vx], eax
+
+	mov ebx, [@@alpha]			; sin(hoek) = cos(hoek - pi/2)
+	sub ebx, 1.570796
+	call cos, ebx	       
+	mov eax, ecx
+	mov ebx, [@@v0]
+	mul ebx, 
+	mov [@@vy], eax
+
+	call cos, hoekwind
+	mov eax, ecx
+	mov ebx, krachtwind
+	mul ebx
+	mov ebx, massa
+	div ebx
+	mov [@@ax], eax
+
+	mov ebx, hoekwind
+	sub ebx, 1.570796
+	call cos, ebx
+	mov eax, ecx
+	mov ebx, krachtwind
+	mul ebx
+	mov ebx, massa
+	div ebx
+	sub eax, g
+	mov [@@ay], eax
 
 
-;	mov eax, 128827
-;	ret
+	
+	
+	ret
 
-;ENDP landingshoogte
+ENDP landingshoogte
 
 PROC printUnsignedInteger
 	ARG	@@printval:dword    ; input argument
