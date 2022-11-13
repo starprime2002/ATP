@@ -36,36 +36,44 @@ PROC terminateProcess
 	ret
 ENDP terminateProcess
 
-PROC cos 							; cos(x) = 1 - x*x/2 + x*x*x*x/24 taylorbenadering cosinus
-	ARG @@hoek:dword RETURNS eax
-	USES ebx
+PROC cos 							;taylorbenadering cosinus
+	ARG @@hoek:dword RETURNS ecx
+	USES eax, ebx, edx
 
-	mov eax, 1
-	mov ebx, [@@hoek]
-	mul ebx, ebx
-	push ebx
-	push 2
-	add
-	pop eax
+	mov ecx, 1						;cos(x) = 1 - x*x/2 + x*x*x*x/24 
 
+	mov eax, [@@hoek]
+	mul eax
+	mul eax
+	mul eax
+	mov ebx, 24
+	div ebx
+	add ecx, eax
+
+	mov eax, [@@hoek]
+	mul eax
+	mov ebx, 2
+	div ebx
+	sub ecx, eax
+		
 	ret
 ENDP cos	
 
-PROC landingshoogte
-	ARG @@alpha: dword, @@v0: dword RETURNS eax
-	LOCAL @@vx: dword, @@vy: dword, @@ax: dword, @@ay: dword 
-	USES ebx
+;PROC landingshoogte
+;	ARG @@alpha: dword, @@v0: dword RETURNS eax
+;	LOCAL @@vx: dword, @@vy: dword, @@ax: dword, @@ay: dword 
+;	USES ebx
+;
+;	mov ebx, [@@v0]
+;	mov ecx, cos(@@alpha)
+;	mul ebx, 
+;
 
-	mov ebx, [@@v0]
-	mov ecx, cos(@@alpha)
-	mul ebx, 
 
+;	mov eax, 128827
+;	ret
 
-
-	mov eax, 128827
-	ret
-
-ENDP landingshoogte
+;ENDP landingshoogte
 
 PROC printUnsignedInteger
 	ARG	@@printval:dword    ; input argument
@@ -100,8 +108,9 @@ PROC main
 	sti
 	cld
 	
-	call    cos, 0.8
-	call printUnsignedInteger, eax
+	call    cos, 1	
+	call printUnsignedInteger, ecx
+
 	call 	waitForKeystroke
 	call	terminateProcess
 ENDP main
