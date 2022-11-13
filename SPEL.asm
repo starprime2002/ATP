@@ -36,10 +36,31 @@ PROC terminateProcess
 	ret
 ENDP terminateProcess
 
+PROC cos 										; cos(x) = 1 - x*x/2 + x*x*x*x/24 taylorbenadering cosinus
+	ARG @@hoek:dword RETURNS eax
+	USES ebx
+
+	mov eax, 1
+	mov ebx, [@@hoek]
+	mul ebx, ebx
+	push ebx
+	push 2
+	add
+	pop eax
+
+	ret
+ENDP cos	
+
 PROC landingshoogte
 	ARG @@alpha: dword, @@v0: dword RETURNS eax
 	LOCAL @@vx: dword, @@vy: dword, @@ax: dword, @@ay: dword 
 	USES ebx
+
+	mov ebx, [@@v0]
+	mov ecx, cos(@@alpha)
+	mul ebx, 
+
+
 
 	mov eax, 128827
 	ret
@@ -79,8 +100,7 @@ PROC main
 	sti
 	cld
 	
-
-	call	landingshoogte, 1, 1
+	call    cos, 0.8
 	call printUnsignedInteger, eax
 	call 	waitForKeystroke
 	call	terminateProcess
