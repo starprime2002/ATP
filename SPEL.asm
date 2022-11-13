@@ -36,7 +36,7 @@ PROC terminateProcess
 	ret
 ENDP terminateProcess
 
-PROC cos 										; cos(x) = 1 - x*x/2 + x*x*x*x/24 taylorbenadering cosinus
+PROC cos 							; cos(x) = 1 - x*x/2 + x*x*x*x/24 taylorbenadering cosinus
 	ARG @@hoek:dword RETURNS eax
 	USES ebx
 
