@@ -123,10 +123,6 @@ ENDP terminateProcess
 ;	sub eax, g
 ;	mov [@@ay], eax
 
-
-
-
-	
 	
 ;	ret
 
@@ -163,7 +159,7 @@ ENDP printUnsignedInteger
 
 
 
-; Fill the background (for mode 13h): blue sky with grass
+; Fill the background (for mode 13h): blue sky with grass and a wall
 
 PROC fillBackground
 	USES 	eax, ecx, edi, edx, ebx
@@ -175,7 +171,7 @@ PROC fillBackground
 	; lucht tekenen
 	; Scan the whole video memory and assign the background colour.
 	mov	ecx, SCRWIDTH*150 ; ecx = amount of elements = aantal pixels
-	mov	al,100	; indx of the first color to change
+	mov	al, 0	; indx of the first color to change
 	rep	stosb			; stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
 						;stosw (word) = transfer two byte (= word)
 						;stosd (double word) = tranfer 4 bytes (= double word)
@@ -183,7 +179,7 @@ PROC fillBackground
 	;gras tekenen
 	mov	edi, VMEMADR
 	add edi, 150*320
-	mov al, 50
+	mov al, 1
 
 	mov edx, 50
 	@@hoogte:
@@ -205,12 +201,14 @@ PROC fillBackground
 		mov ebx, 50
 		add ebx, edx
 		mov eax, 320
+		push edx
 		mul ebx
+		pop edx
 		mov ebx, eax
 		add ebx, 249
 		mov	edi, VMEMADR
 		add edi, ebx
-		mov al, 142
+		mov al, 2
 		mov ecx, 20
 			@@breedtemuur:
 				mov [edi], al
@@ -219,15 +217,55 @@ PROC fillBackground
 				cmp ecx, 0
 				jne @@breedtemuur
 		inc edx
-		cmp edx, 3
+		cmp edx, 100
 		jne @@hoogtemuur
 
 	ret
 ENDP fillBackground
 
+PROC updatecolorpallete ;moet nog veranderd worden in a loop
+
+	USES eax, edx
 
 
+	;Kleur lucht
+	mov DX, 03C8h ; DAC write port
+	mov AL, 0 ; index of first color to change
+	out DX, AL ; write to IO
+	mov DX, 03C9h ; DAC data port
+	mov AL, 34 ; load red value (6-bit)
+	out DX, AL ; write red value
+	mov AL, 52 ; load green value (6-bit)
+	out DX, AL ; write green value
+	mov AL, 63 ; load blue value (6-bit)
+	out DX, AL ; write blue value
 
+	;Kleur gras
+	mov DX, 03C8h ; DAC write port
+	mov AL, 1 ; index of first color to change
+	out DX, AL ; write to IO
+	mov DX, 03C9h ; DAC data port
+	mov AL, 31 ; load red value (6-bit)
+	out DX, AL ; write red value
+	mov AL, 63 ; load green value (6-bit)
+	out DX, AL ; write green value
+	mov AL, 0 ; load blue value (6-bit)
+	out DX, AL ; write blue value
+
+	;Kleur muur
+	mov DX, 03C8h ; DAC write port
+	mov AL, 2 ; index of first color to change
+	out DX, AL ; write to IO
+	mov DX, 03C9h ; DAC data port
+	mov AL, 53 ; load red value (6-bit)
+	out DX, AL ; write red value
+	mov AL, 26 ; load green value (6-bit)
+	out DX, AL ; write green value
+	mov AL, 8 ; load blue value (6-bit)
+	out DX, AL ; write blue value
+
+	ret
+ENDP updatecolorpallete
 
 PROC main
 	sti
@@ -238,8 +276,8 @@ PROC main
 
 	call	setVideoMode, 13h
 	finit	; initialize FPU
-	;call    cos, 1	
-	;call printUnsignedInteger, ecx
+
+	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
@@ -248,7 +286,6 @@ ENDP main
 ; DATA
 ; -------------------------------------------------------------------
 DATASEG
-
 	
 	krachtwind dd 1		; de krachtwaarde van de wind
 	hoekwind dd 1		; de hoek van de wind
