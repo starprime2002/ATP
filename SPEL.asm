@@ -166,7 +166,10 @@ PROC updatecolorpallete ;moet nog veranderd worden in a loop
 
 	@@kleur:
 		mov DX, 03C8h ; DAC write port
-		out DX, AL ; write to IO
+		push eax
+		mov al, ah
+		out DX, Al ; write to IO
+		pop eax
 
 
 		mov DX, 03C9h ; DAC data port
@@ -289,7 +292,7 @@ DATASEG
 	alpha dd 0.6 		; hoek van de worp
 	g dd 9.81
 
-	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 58
+	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8				; lucht-gras-muur
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
