@@ -282,6 +282,16 @@ PROC drawpixel
 	ret
 ENDP drawpixel
 
+PROC printstring
+ARG @@string: dword
+	USES eax, edx
+	mov ah, 09h
+	mov edx, [@@string]
+	int 21h
+
+	ret
+ENDP printstring
+
 PROC main
 	sti
 	cld
@@ -295,6 +305,8 @@ PROC main
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
 	call 	drawpixel, 1, 1 ; limits are: (0,0) to (199,319)
+
+	call	printstring, offset msg	; print de titel
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
@@ -312,6 +324,8 @@ DATASEG
 	g dd 9.81
 
 	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 0, 0, 0			; lucht-gras-muur
+
+	msg	db "Aim the prof!", 13, 10, '$' 
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
