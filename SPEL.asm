@@ -194,7 +194,7 @@ PROC updatecolorpallete ;moet nog veranderd worden in a loop
 		add ebx, 4
 		
 		inc ah
-		cmp ah, 3
+		cmp ah, 4	;4 is aantal kleuren die we hebben in pallet
 		jne @@kleur
 
 	ret
@@ -265,6 +265,23 @@ PROC fillBackground
 	ret
 ENDP fillBackground
 
+PROC drawpixel
+	ARG @@ycoord:dword ,@@xcoord:dword
+	USES eax, ebx
+
+	mov	edi, VMEMADR
+	;write pixel in ycoord lines down and xcoord lines to the right
+	mov ebx, [@@ycoord]
+	mov eax, 320
+	mul ebx
+	add edi, eax
+	add edi, [@@xcoord]
+	mov al, 3			; pick the color of the pallet
+	mov [edi], al
+
+	ret
+ENDP drawpixel
+
 PROC main
 	sti
 	cld
@@ -277,6 +294,8 @@ PROC main
 
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
+	call 	drawpixel, 1, 1 ; limits are: (0,0) to (199,319)
+
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
 ENDP main
@@ -292,7 +311,7 @@ DATASEG
 	alpha dd 0.6 		; hoek van de worp
 	g dd 9.81
 
-	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8				; lucht-gras-muur
+	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 0, 0, 0			; lucht-gras-muur
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
@@ -302,4 +321,5 @@ END main
 
 ; here is a comment heehekbeb
 ;another comment hihihihi
+
 
