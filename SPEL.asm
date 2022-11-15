@@ -156,7 +156,46 @@ PROC printUnsignedInteger
 	ret
 ENDP printUnsignedInteger
 
+PROC updatecolorpallete ;moet nog veranderd worden in a loop
 
+	USES eax, ebx, ecx, edx
+
+	mov ebx, offset paletteperso
+
+	mov ah, 0
+
+	@@kleur:
+		mov DX, 03C8h ; DAC write port
+		out DX, AL ; write to IO
+
+
+		mov DX, 03C9h ; DAC data port
+
+		mov AL, [ebx] ; load red value (6-bit)
+		out DX, AL ; write red value
+		mov ecx, [ebx]
+		call printUnsignedInteger, ecx
+
+		add ebx, 4
+		mov AL, [ebx] ; load green value (6-bit)
+		out DX, AL ; write green value
+		mov ecx, [ebx]
+		call printUnsignedInteger, ecx
+
+		add ebx, 4
+		mov AL, [ebx] ; load blue value (6-bit)
+		out DX, AL ; write blue value
+		mov ecx, [ebx]
+		call printUnsignedInteger, ecx
+
+		add ebx, 4
+		
+		inc ah
+		cmp ah, 3
+		jne @@kleur
+
+	ret
+ENDP updatecolorpallete
 
 
 ; Fill the background (for mode 13h): blue sky with grass and a wall
@@ -223,50 +262,6 @@ PROC fillBackground
 	ret
 ENDP fillBackground
 
-PROC updatecolorpallete ;moet nog veranderd worden in a loop
-
-	USES eax, edx
-
-
-	;Kleur lucht
-	mov DX, 03C8h ; DAC write port
-	mov AL, 0 ; index of first color to change
-	out DX, AL ; write to IO
-	mov DX, 03C9h ; DAC data port
-	mov AL, 34 ; load red value (6-bit)
-	out DX, AL ; write red value
-	mov AL, 52 ; load green value (6-bit)
-	out DX, AL ; write green value
-	mov AL, 63 ; load blue value (6-bit)
-	out DX, AL ; write blue value
-
-	;Kleur gras
-	mov DX, 03C8h ; DAC write port
-	mov AL, 1 ; index of first color to change
-	out DX, AL ; write to IO
-	mov DX, 03C9h ; DAC data port
-	mov AL, 31 ; load red value (6-bit)
-	out DX, AL ; write red value
-	mov AL, 63 ; load green value (6-bit)
-	out DX, AL ; write green value
-	mov AL, 0 ; load blue value (6-bit)
-	out DX, AL ; write blue value
-
-	;Kleur muur
-	mov DX, 03C8h ; DAC write port
-	mov AL, 2 ; index of first color to change
-	out DX, AL ; write to IO
-	mov DX, 03C9h ; DAC data port
-	mov AL, 53 ; load red value (6-bit)
-	out DX, AL ; write red value
-	mov AL, 26 ; load green value (6-bit)
-	out DX, AL ; write green value
-	mov AL, 8 ; load blue value (6-bit)
-	out DX, AL ; write blue value
-
-	ret
-ENDP updatecolorpallete
-
 PROC main
 	sti
 	cld
@@ -294,6 +289,7 @@ DATASEG
 	alpha dd 0.6 		; hoek van de worp
 	g dd 9.81
 
+	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 58
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
