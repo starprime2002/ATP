@@ -301,4 +301,5 @@ STACK 100h
 END main
 
 ; here is a comment heehekbeb
+;another comment hihihihi
 
