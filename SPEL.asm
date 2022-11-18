@@ -118,7 +118,7 @@ PROC updatecolorpallete ;moet nog veranderd worden in a loop
 		
 
 		inc ah
-		cmp ah, 3
+		cmp ah, 5
 		jne @@kleur
 
 	ret
@@ -169,11 +169,11 @@ PROC fillBackground
 		mul ebx
 		pop edx
 		mov ebx, eax
-		add ebx, 249
+		add ebx, 299
 		mov	edi, VMEMADR
 		add edi, ebx
 		mov al, 2
-		mov ecx, 20
+		mov ecx, 10
 			@@breedtemuur:
 				mov [edi], al
 				inc edi
@@ -184,6 +184,31 @@ PROC fillBackground
 		cmp edx, 100
 		jne @@hoogtemuur
 
+	;doelwit tekenen
+	mov edx, 1
+	@@hoogtedoel:
+		xor ebx, ebx	
+		mov ebx, 100
+		add ebx, edx
+		mov eax, 320
+		push edx
+		mul ebx
+		pop edx
+		mov ebx, eax
+		add ebx, 297
+		mov	edi, VMEMADR
+		add edi, ebx
+		mov al, 3
+		mov ecx, 2
+			@@breedtedoel:
+				mov [edi], al
+				inc edi
+				dec ecx
+				cmp ecx, 0
+				jne @@breedtedoel
+		inc edx
+		cmp edx, 10
+		jne @@hoogtedoel
 	ret
 ENDP fillBackground
 
@@ -201,7 +226,7 @@ PROC drawpixel
 	imul ebx
 	add edi, eax
 	add edi, [@@xcoord]
-	mov al, 3			; pick the color of the pallet
+	mov al, 4			; pick the color of the pallet
 	
 	mov [edi], al
 	add edi, 1
@@ -240,7 +265,7 @@ PROC kogelbaan
 	mov eax, [@@vybegin]			; 		        ""          ""	
 	mov [@@vy], eax
 	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
-	mov [@@ay], 1					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
+	mov [@@ay], 9					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
 
 
 	@@tijdsloop:
@@ -303,7 +328,7 @@ PROC main
 
 	call 	drawpixel, 25, 25
 
-	call	kogelbaan, 10, 15
+	call	kogelbaan, 40, 30
 
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
@@ -321,7 +346,7 @@ DATASEG
 	alpha dd 0.6 		; hoek van de worp
 	g dd 9.81
 
-	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8				; lucht-gras-muur
+	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur
 
 ; -------------------------------------------------------------------
 ; STACK
