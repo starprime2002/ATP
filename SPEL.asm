@@ -256,7 +256,7 @@ PROC kogelbaan
 	USES eax, ebx
 
 	mov [@@tijd], 0
-	mov [@@dt], 1					; Eenheid:	[tijdseenheid]
+	mov [@@dt], 1					; Eenheid:	[16de ve tijdseenheid] (gefractioneerde bit)
 
 	mov [@@xpos], 25				;		   	[2^(-5)-ste van een pixels]
 	mov [@@ypos], 25				; 		        ""          ""
@@ -267,6 +267,27 @@ PROC kogelbaan
 	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
 	mov [@@ay], 9					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
 
+
+	mov ebx, 1						; tijdsfractie
+
+	mov eax, [@@xpos]
+	mul ebx
+	mov [@@xpos], eax
+	mov eax, [@@ypos]
+	mul ebx
+	mov [@@ypos], eax
+	mov eax, [@@vx]
+	mul ebx
+	mov [@@vx], eax
+	mov eax, [@@vy]
+	mul ebx
+	mov [@@vy], eax
+	mov eax, [@@ax]
+	mul ebx
+	mov [@@ax], eax
+	mov eax, [@@ay]
+	mul ebx
+	mov [@@ay], eax
 
 	@@tijdsloop:
 		mov eax, [@@dt]
@@ -290,20 +311,25 @@ PROC kogelbaan
 		imul ebx
 		add [@@ypos], eax
 		
-
+		mov ebx, 1
+		mov eax, [@@xpos]
+		div ebx
+		push eax
 		mov eax, [@@ypos]
-		mov ebx, [@@xpos]
+		div ebx
+		mov ebx, eax
+		pop eax
 
-		call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 
 		call printUnsignedInteger, ebx
-		call	drawpixel, ebx, eax
+		call waitForSpecificKeystroke, 001Bh
+		call	drawpixel, eax, ebx
 
-		cmp eax, 3					; check grondlimiet
+		cmp eax, 246				; check muur (zal ongeveer 200 pixels verder zijn) 
+		jge @@einde					; (hou rekening met breedte kogel)
+
+		cmp ebx, 3					; check grondlimiet
 		jle @@einde					; (hou rekening met hoogte kogel)
-
-		cmp ebx, 246				; check muur (zal ongeveer 200 pixels verder zijn) 
-		jge @@einde			; (hou rekening met breedte kogel)
 
 		jmp @@tijdsloop
 
