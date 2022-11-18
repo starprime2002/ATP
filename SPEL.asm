@@ -228,7 +228,7 @@ PROC kogelbaan
 	mov eax, [@@vybegin]			; 		        ""          ""	
 	mov [@@vy], eax
 	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
-	mov [@@ay], -10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
+	mov [@@ay], 10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
 
 
 	@@tijdsloop:
@@ -283,6 +283,8 @@ PROC main
 	
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
+
+	call	drawpixel, 125, 25
 
 	call	kogelbaan, 3, 3
 	call	kogelbaan, 3, 30
