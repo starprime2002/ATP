@@ -188,26 +188,38 @@ PROC fillBackground
 ENDP fillBackground
 
 PROC drawpixel
-	ARG @@ycoord:dword ,@@xcoord:dword
+	ARG @@xcoord:dword ,@@ycoord:dword
+
 	USES eax, ebx
 
 	mov	edi, VMEMADR
 	;write pixel in ycoord lines down and xcoord lines to the right
-	mov ebx, [@@ycoord]
+	mov eax, [@@ycoord]
+	mov ebx, 149
+	sub ebx, eax
 	mov eax, 320
-	mul ebx
+	imul ebx
 	add edi, eax
 	add edi, [@@xcoord]
 	mov al, 3			; pick the color of the pallet
-	mov [edi], al
-
-	add edi, 1
-	mov [edi], al
-	add edi, 319
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
 	
+	mov [edi], al
+	add edi, 1
+	mov [edi], al
+	add edi, 1
+	mov [edi], al
+	add edi, 318
+	mov [edi], al
+	add edi, 1
+	mov [edi], al
+	add edi, 1
+	mov [edi], al
+	add edi, 318
+	mov [edi], al
+	add edi, 1
+	mov [edi], al
+	add edi, 1
+	mov [edi], al	
 	
 	ret
 ENDP drawpixel
@@ -221,14 +233,14 @@ PROC kogelbaan
 	mov [@@tijd], 0
 	mov [@@dt], 1					; Eenheid:	[tijdseenheid]
 
-	mov [@@xpos], 0					;		   	[2^(-5)-ste van een pixels]
-	mov [@@ypos], 0					; 		        ""          ""
+	mov [@@xpos], 25				;		   	[2^(-5)-ste van een pixels]
+	mov [@@ypos], 25				; 		        ""          ""
 	mov eax, [@@vxbegin]			;          	[2^(-5)-ste van een pixels per tijdseenheid]
 	mov [@@vx], eax
 	mov eax, [@@vybegin]			; 		        ""          ""	
 	mov [@@vy], eax
 	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
-	mov [@@ay], 10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
+	mov [@@ay], 1					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
 
 
 	@@tijdsloop:
@@ -241,8 +253,8 @@ PROC kogelbaan
 		add [@@vx], eax
 		mov eax, [@@ay]
 		mov ebx, [@@dt]
-		imul ebx
-		add [@@vy], eax
+		mul ebx
+		sub [@@vy], eax
 
 		mov eax, [@@vx]
 		mov ebx, [@@dt]
@@ -250,23 +262,28 @@ PROC kogelbaan
 		add [@@xpos], eax
 		mov eax, [@@vy]
 		mov ebx, [@@dt]
-		mul ebx
+		imul ebx
 		add [@@ypos], eax
 		
 
-		mov eax, [@@ypos]			; check grondlimiet
-		mov ebx, [@@xpos]			; check muur (zal ongeveer 200 pixels verder zijn)
+		mov eax, [@@ypos]
+		mov ebx, [@@xpos]
 
 		call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 
+		call printUnsignedInteger, ebx
 		call	drawpixel, ebx, eax
 
-		cmp eax, 1
-		jl @@tijdsloop
+		cmp eax, 3					; check grondlimiet
+		jle @@einde					; (hou rekening met hoogte kogel)
 
-		cmp eax, 200
-		jl @@tijdsloop
+		cmp ebx, 246				; check muur (zal ongeveer 200 pixels verder zijn) 
+		jge @@einde			; (hou rekening met breedte kogel)
 
+		jmp @@tijdsloop
+
+
+	@@einde:
 
 	ret
 ENDP kogelbaan
@@ -284,10 +301,9 @@ PROC main
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
 
-	call	drawpixel, 125, 25
+	call 	drawpixel, 25, 25
 
-	call	kogelbaan, 3, 3
-	call	kogelbaan, 3, 30
+	call	kogelbaan, 10, 15
 
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
