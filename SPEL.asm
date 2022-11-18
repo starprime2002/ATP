@@ -228,23 +228,23 @@ PROC drawpixel
 	add edi, [@@xcoord]
 	mov al, 4			; pick the color of the pallet
 	
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 318
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 318
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 1
-	mov [edi], al	
+		mov [edi], al
+	;	add edi, 1
+	;	mov [edi], al
+	;	add edi, 1
+	;	mov [edi], al
+	;	add edi, 318
+	;	mov [edi], al
+	;	add edi, 1
+	;	mov [edi], al
+	;	add edi, 1
+	;	mov [edi], al
+	;	add edi, 318
+	;	mov [edi], al
+	;	add edi, 1
+	;	mov [edi], al
+	;	add edi, 1
+	;	mov [edi], al	
 	
 	ret
 ENDP drawpixel
@@ -258,36 +258,15 @@ PROC kogelbaan
 	mov [@@tijd], 0
 	mov [@@dt], 1					; Eenheid:	[16de ve tijdseenheid] (gefractioneerde bit)
 
-	mov [@@xpos], 25				;		   	[2^(-5)-ste van een pixels]
-	mov [@@ypos], 25				; 		        ""          ""
-	mov eax, [@@vxbegin]			;          	[2^(-5)-ste van een pixels per tijdseenheid]
+	mov [@@xpos], 25				;		   	[pixels]
+	mov [@@ypos], 25				; 		        ""
+	mov eax, [@@vxbegin]			;          	[pixels per tijdseenheid]
 	mov [@@vx], eax
-	mov eax, [@@vybegin]			; 		        ""          ""	
+	mov eax, [@@vybegin]			; 		        ""
 	mov [@@vy], eax
-	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
-	mov [@@ay], 9					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
+	mov [@@ax], 0					;          	[pixels per tijdseenheid²]
+	mov [@@ay], 10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""
 
-
-	mov ebx, 1						; tijdsfractie
-
-	mov eax, [@@xpos]
-	mul ebx
-	mov [@@xpos], eax
-	mov eax, [@@ypos]
-	mul ebx
-	mov [@@ypos], eax
-	mov eax, [@@vx]
-	mul ebx
-	mov [@@vx], eax
-	mov eax, [@@vy]
-	mul ebx
-	mov [@@vy], eax
-	mov eax, [@@ax]
-	mul ebx
-	mov [@@ax], eax
-	mov eax, [@@ay]
-	mul ebx
-	mov [@@ay], eax
 
 	@@tijdsloop:
 		mov eax, [@@dt]
@@ -310,18 +289,11 @@ PROC kogelbaan
 		mov ebx, [@@dt]
 		imul ebx
 		add [@@ypos], eax
-		
-		mov ebx, 1
+
 		mov eax, [@@xpos]
-		div ebx
-		push eax
-		mov eax, [@@ypos]
-		div ebx
-		mov ebx, eax
-		pop eax
+		mov ebx, [@@ypos]
 
-
-		call printUnsignedInteger, ebx
+		call printUnsignedInteger, eax
 		call waitForSpecificKeystroke, 001Bh
 		call	drawpixel, eax, ebx
 
@@ -339,6 +311,67 @@ PROC kogelbaan
 	ret
 ENDP kogelbaan
 
+PROC kogelbaan2
+	ARG @@vxbegin:dword, @@vybegin:dword
+	LOCAL @@tijd:dword, @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
+	USES eax, ebx, edx
+
+	mov [@@tijd], 0
+	mov [@@dt], 4					; Eenheid:	[helft ve tijdseenheid] (gefractioneerde bit)
+
+	mov [@@xpos], 25				;		   	[pixels]
+	mov [@@ypos], 25				; 		        ""
+	mov eax, [@@vxbegin]			;          	[pixels per tijdseenheid]
+	mov [@@vx], eax
+	mov eax, [@@vybegin]			; 		        ""
+	mov [@@vy], eax
+	mov [@@ax], 0					;          	[pixels per tijdseenheid²]
+	mov [@@ay], 10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""
+
+
+	@@tijdsloop:
+		mov eax, [@@dt]
+		add [@@tijd], eax
+
+		mov eax, [@@ax]				; ik weet dat ax toch nul is maar in toekomst zal ook windkracht komen
+		mov ebx, [@@dt]
+		div ebx
+		add [@@vx], eax
+		mov eax, [@@ay]
+		mov ebx, [@@dt]
+		div ebx
+		sub [@@vy], eax
+
+		mov eax, [@@vx]
+		mov ebx, [@@dt]
+		div ebx
+		add [@@xpos], eax
+		mov eax, [@@vy]
+		mov ebx, [@@dt]
+		idiv ebx
+		add [@@ypos], eax
+
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+
+		call printUnsignedInteger, eax
+		call waitForSpecificKeystroke, 001Bh
+		call	drawpixel, eax, ebx
+
+		cmp eax, 246				; check muur (zal ongeveer 200 pixels verder zijn) 
+		jge @@einde					; (hou rekening met breedte kogel)
+
+		cmp ebx, 3					; check grondlimiet
+		jle @@einde					; (hou rekening met hoogte kogel)
+
+		jmp @@tijdsloop
+
+
+	@@einde:
+
+	ret
+ENDP kogelbaan2
+
 PROC main
 	sti
 	cld
@@ -355,7 +388,7 @@ PROC main
 	call 	drawpixel, 25, 25
 
 	call	kogelbaan, 40, 30
-
+	call	kogelbaan2, 40, 30
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
