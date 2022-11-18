@@ -57,77 +57,6 @@ PROC terminateProcess
 	ret
 ENDP terminateProcess
 
-
-;PROC cos 							;taylorbenadering cosinus
-;	ARG @@hoek:dword RETURNS ecx
-;	USES eax, ebx, edx
-;
-;	mov ecx, 1						;cos(x) = 1 - x*x/2 + x*x*x*x/24 
-;
-;	mov eax, [@@hoek]
-;	mul eax
-;	mul eax
-;	mul eax
-;	mov ebx, 24
-;	div ebx
-;	add ecx, eax
-;
-;	mov eax, [@@hoek]
-;	mul eax
-;	mov ebx, 2
-;	div ebx
-;	sub ecx, eax
-;		
-;	ret
-;ENDP cos	
-
-;PROC landingshoogte
-;	ARG @@alpha:dword, @@v0:dword RETURNS eax
-;	LOCAL @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword 
-;	USES ebx
-;
-;	;vx
-;	call cos, [@@alpha]	       ;retwaarde is in ecx
-;	mov eax, ecx
-;	mov ebx, [@@v0]
-;	mul ebx, 
-;	mov [@@vx], eax
-;
-;	;vy
-;	mov ebx, [@@alpha]			; sin(hoek) = cos(hoek - pi/2)
-;	sub ebx, 1.570796
-;	call cos, ebx	       
-;	mov eax, ecx
-;	mov ebx, [@@v0]
-;	mul ebx, 
-;	mov [@@vy], eax
-
-	;ax
-;	call cos, hoekwind
-;	mov eax, ecx
-;	mov ebx, krachtwind
-;	mul ebx
-;	mov ebx, massa
-;	div ebx
-;	mov [@@ax], eax
-
-	;ay
-;	mov ebx, hoekwind
-;	sub ebx, 1.570796
-;	call cos, ebx
-;	mov eax, ecx
-;	mov ebx, krachtwind
-;	mul ebx
-;	mov ebx, massa
-;	div ebx
-;	sub eax, g
-;	mov [@@ay], eax
-
-	
-;	ret
-
-;ENDP landingshoogte
-
 PROC printUnsignedInteger
 	ARG	@@printval:dword    ; input argument
 	USES eax, ebx, ecx, edx
@@ -137,22 +66,22 @@ PROC printUnsignedInteger
 	xor ecx, ecx	; counter for digits to be printed
 
 	; Store digits on stack
-@@getNextDigit:
-	inc	ecx         ; increase digit counter
-	xor edx, edx
-	div	ebx   		; divide by 10
-	push dx			; store remainder on stack
-	test eax, eax	; check whether zero?
-	jnz	@@getNextDigit
+	@@getNextDigit:
+		inc	ecx         ; increase digit counter
+		xor edx, edx
+		div	ebx   		; divide by 10
+		push dx			; store remainder on stack
+		test eax, eax	; check whether zero?
+		jnz	@@getNextDigit
 
-    ; Write all digits to the standard output
-	mov	ah, 2h 		; Function for printing single characters.
-@@printDigits:		
-	pop dx
-	add	dl,'0'      	; Add 30h => code for a digit in the ASCII table, ...
-	int	21h            	; Print the digit to the screen, ...
-	loop @@printDigits	; Until digit counter = 0.
-	
+		; Write all digits to the standard output
+		mov	ah, 2h 		; Function for printing single characters.
+	@@printDigits:		
+		pop dx
+		add	dl,'0'      	; Add 30h => code for a digit in the ASCII table, ...
+		int	21h            	; Print the digit to the screen, ...
+		loop @@printDigits	; Until digit counter = 0.
+		
 	ret
 ENDP printUnsignedInteger
 
@@ -176,33 +105,26 @@ PROC updatecolorpallete ;moet nog veranderd worden in a loop
 
 		mov AL, [ebx] ; load red value (6-bit)
 		out DX, AL ; write red value
-		mov ecx, [ebx]
-		call printUnsignedInteger, ecx
 
 		add ebx, 4
 		mov AL, [ebx] ; load green value (6-bit)
 		out DX, AL ; write green value
-		mov ecx, [ebx]
-		call printUnsignedInteger, ecx
 
 		add ebx, 4
 		mov AL, [ebx] ; load blue value (6-bit)
 		out DX, AL ; write blue value
-		mov ecx, [ebx]
-		call printUnsignedInteger, ecx
 
 		add ebx, 4
 		
+
 		inc ah
-		cmp ah, 4	;4 is aantal kleuren die we hebben in pallet
+		cmp ah, 3
 		jne @@kleur
 
 	ret
 ENDP updatecolorpallete
 
-
 ; Fill the background (for mode 13h): blue sky with grass and a wall
-
 PROC fillBackground
 	USES 	eax, ecx, edi, edx, ebx
 
@@ -266,7 +188,7 @@ PROC fillBackground
 ENDP fillBackground
 
 PROC drawpixel
-	ARG @@ycoord:dword ,@@xcoord:dword
+	ARG @@xcoord:dword ,@@ycoord:dword
 	USES eax, ebx
 
 	mov	edi, VMEMADR
@@ -279,18 +201,78 @@ PROC drawpixel
 	mov al, 3			; pick the color of the pallet
 	mov [edi], al
 
+	add edi, 1
+	mov [edi], al
+	add edi, 319
+	mov [edi], al
+	add edi, 1
+	mov [edi], al
+	
+	
 	ret
 ENDP drawpixel
 
-PROC printstring
-ARG @@string: dword
-	USES eax, edx
-	mov ah, 09h
-	mov edx, [@@string]
-	int 21h
+;procedure om de baan te berekenen
+PROC kogelbaan
+	ARG @@vxbegin:dword, @@vybegin:dword
+	LOCAL @@tijd:dword, @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
+	USES eax, ebx
+
+	mov [@@tijd], 0
+	mov [@@dt], 1					; Eenheid:	[tijdseenheid]
+
+	mov [@@xpos], 25					;		   	[2^(-5)-ste van een pixels]
+	mov [@@ypos], 25					; 		        ""          ""
+	mov eax, [@@vxbegin]			;          	[2^(-5)-ste van een pixels per tijdseenheid]
+	mov [@@vx], eax
+	mov eax, [@@vybegin]			; 		        ""          ""	
+	mov [@@vy], eax
+	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
+	mov [@@ay], 10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
+
+
+	@@tijdsloop:
+		mov eax, [@@dt]
+		add [@@tijd], eax
+
+		mov eax, [@@ax]				; ik weet dat ax toch nul is maar in toekomst zal ook windkracht komen
+		mov ebx, [@@dt]				; ik weet ook dat dt toch 1 is (maar zou kunne veranderen) 
+		mul ebx
+		add [@@vx], eax
+		mov eax, [@@ay]
+		mov ebx, [@@dt]
+		imul ebx
+		add [@@vy], eax
+
+		mov eax, [@@vx]
+		mov ebx, [@@dt]
+		mul ebx
+		add [@@xpos], eax
+		mov eax, [@@vy]
+		mov ebx, [@@dt]
+		mul ebx
+		add [@@ypos], eax
+		
+
+		mov eax, [@@ypos]			; check grondlimiet
+		mov ebx, [@@xpos]			; check muur (zal ongeveer 200 pixels verder zijn)
+
+		call printUnsignedInteger, eax
+		call printUnsignedInteger, ebx
+
+		call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
+
+		call	drawpixel, ebx, eax
+
+		cmp eax, 3
+		jg @@tijdsloop
+
+		cmp ebx, 197
+		jl @@tijdsloop
+
 
 	ret
-ENDP printstring
+ENDP kogelbaan
 
 PROC main
 	sti
@@ -301,12 +283,15 @@ PROC main
 
 	call	setVideoMode, 13h
 	finit	; initialize FPU
-
+	
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
-	call 	drawpixel, 1, 1 ; limits are: (0,0) to (199,319)
 
-	call	printstring, offset msg	; print de titel
+	call	drawpixel, 25, 125
+
+	call	kogelbaan, 3, 3
+	call	kogelbaan, 3, 30
+
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
@@ -323,9 +308,8 @@ DATASEG
 	alpha dd 0.6 		; hoek van de worp
 	g dd 9.81
 
-	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 0, 0, 0			; lucht-gras-muur
+	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8				; lucht-gras-muur
 
-	msg	db "Aim the prof!", 13, 10, '$' 
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
@@ -333,7 +317,6 @@ STACK 100h
 
 END main
 
-; here is a comment heehekbeb
-;another comment hihihihi
 
 
+;mfg
