@@ -58,6 +58,27 @@ PROC terminateProcess
 	ret
 ENDP terminateProcess
 
+;Procedure wait_VBLANK van EXAMPLES\DANCER genomen
+; wait for @@framecount frames
+PROC wait_VBLANK
+	ARG @@framecount: word
+	USES eax, ecx, edx
+	mov dx, 03dah 					; Wait for screen refresh
+	movzx ecx, [@@framecount]
+	
+		@@VBlank_phase1:
+		in al, dx 
+		and al, 8
+		jnz @@VBlank_phase1
+		@@VBlank_phase2:
+		in al, dx 
+		and al, 8
+		jz @@VBlank_phase2
+	loop @@VBlank_phase1
+	
+	ret 
+ENDP wait_VBLANK
+
 PROC printUnsignedInteger
 	ARG	@@printval:dword    ; input argument
 	USES eax, ebx, ecx, edx
@@ -170,7 +191,7 @@ PROC fillBackground
 		mul ebx
 		pop edx
 		mov ebx, eax
-		add ebx, 299
+		add ebx, 300
 		mov	edi, VMEMADR
 		add edi, ebx
 		mov al, 2
@@ -196,7 +217,7 @@ PROC fillBackground
 		mul ebx
 		pop edx
 		mov ebx, eax
-		add ebx, 297
+		add ebx, 298
 		mov	edi, VMEMADR
 		add edi, ebx
 		mov al, 3
@@ -213,9 +234,8 @@ PROC fillBackground
 	ret
 ENDP fillBackground
 
-PROC drawpixel
+PROC drawPixel
 	ARG @@xcoord:dword ,@@ycoord:dword, @@color:byte
-
 	USES eax, ebx
 
 	mov	edi, VMEMADR
@@ -227,28 +247,69 @@ PROC drawpixel
 	imul ebx
 	add edi, eax
 	add edi, [@@xcoord]
-	mov al, [@@color]			; pick the color of the pallet
 	
+	mov al, [@@color]						; pick the color of the pallet
 	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 318
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 318
-	mov [edi], al
-	add edi, 1
-	mov [edi], al
-	add edi, 1
-	mov [edi], al	
-	
+
 	ret
-ENDP drawpixel
+ENDP drawPixel
+
+PROC moveBullet
+	ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos:dword
+	USES ebx, ecx
+
+
+	;Delete previous bullet
+	mov ebx, [@@oldXpos]
+	mov ecx, [@@oldYpos]
+
+	call drawPixel, ebx, ecx, 0
+	inc ebx
+	call drawPixel, ebx, ecx, 0
+	inc ebx
+	call drawPixel, ebx, ecx, 0
+	sub ebx, 2
+	dec ecx
+	call drawPixel, ebx, ecx, 0
+	inc ebx
+	call drawPixel, ebx, ecx, 0
+	inc ebx
+	call drawPixel, ebx, ecx, 0
+	sub ebx, 2
+	dec ecx
+	call drawPixel, ebx, ecx, 0
+	inc ebx
+	call drawPixel, ebx, ecx, 0
+	inc ebx
+	call drawPixel, ebx, ecx, 0
+
+
+	;Draw new bullet
+	mov ebx, [@@newXpos]
+	mov ecx, [@@newYpos]
+
+	call drawPixel, ebx, ecx, 4
+	inc ebx
+	call drawPixel, ebx, ecx, 4
+	inc ebx
+	call drawPixel, ebx, ecx, 4
+	sub ebx, 2
+	dec ecx
+	call drawPixel, ebx, ecx, 4
+	inc ebx
+	call drawPixel, ebx, ecx, 4
+	inc ebx
+	call drawPixel, ebx, ecx, 4
+	sub ebx, 2
+	dec ecx
+	call drawPixel, ebx, ecx, 4
+	inc ebx
+	call drawPixel, ebx, ecx, 4
+	inc ebx
+	call drawPixel, ebx, ecx, 4
+
+	ret
+ENDP moveBullet
 
 ;procedure om de baan te berekenen
 PROC kogelbaan
@@ -259,14 +320,20 @@ PROC kogelbaan
 	mov [@@tijd], 0
 	mov [@@dt], 1					; Eenheid:	[tijdseenheid]
 
-	mov [@@xpos], 25				;		   	[2^(-5)-ste van een pixels]
-	mov [@@ypos], 25				; 		        ""          ""
+	mov eax, 25
+	mov ebx, 25
+
+	push eax
+	push ebx
+
+	mov [@@xpos], eax				;		   	[2^(-5)-ste van een pixels]
+	mov [@@ypos], ebx				; 		        ""          ""
 	mov eax, [@@vxbegin]			;          	[2^(-5)-ste van een pixels per tijdseenheid]
 	mov [@@vx], eax
 	mov eax, [@@vybegin]			; 		        ""          ""	
 	mov [@@vy], eax
 	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
-	mov [@@ay], 9					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
+	mov [@@ay], 10					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	@@tijdsloop:
@@ -295,21 +362,24 @@ PROC kogelbaan
 		add [@@ypos], eax
 		
 
-		mov eax, [@@ypos]
-		mov ebx, [@@xpos]
+		pop ebx
+		pop eax
 
-		
-		
-		call printUnsignedInteger, ebx
-		call	drawpixel, ebx, eax, 4		;de kogel tekenen
-		call wait_VBLANK, 15				; 100 --> 1 seconde
-		call	drawpixel, ebx, eax, 0		;de kogel verdwijnt voor volgende animatie
+		call moveBullet, eax, ebx, [@@xpos], [@@ypos] 
 
-		cmp eax, 3					; check grondlimiet
-		jle @@einde					; (hou rekening met hoogte kogel)
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+		push eax
+		push ebx
 
-		cmp ebx, 246				; check muur (zal ongeveer 200 pixels verder zijn) 
-		jge @@einde			; (hou rekening met breedte kogel)
+
+		cmp eax, 297							; check muur (zal ongeveer 200 pixels verder zijn) 
+		jge @@einde								; (hou rekening met breedte kogel)
+
+		cmp ebx, 3								; check grondlimiet
+		jle @@einde								; (hou rekening met hoogte kogel)
+
+		call wait_VBLANK, 15					; 100 --> 1 seconde
 
 		jmp @@tijdsloop
 
@@ -318,26 +388,6 @@ PROC kogelbaan
 	ret
 ENDP kogelbaan
 
-;Procedure wait_VBLANK van EXAMPLES\DANCER genomen
-; wait for @@framecount frames
-PROC wait_VBLANK
-	ARG @@framecount: word
-	USES eax, ecx, edx
-	mov dx, 03dah 					; Wait for screen refresh
-	movzx ecx, [@@framecount]
-	
-		@@VBlank_phase1:
-		in al, dx 
-		and al, 8
-		jnz @@VBlank_phase1
-		@@VBlank_phase2:
-		in al, dx 
-		and al, 8
-		jz @@VBlank_phase2
-	loop @@VBlank_phase1
-	
-	ret 
-ENDP wait_VBLANK
 
 
 PROC main
@@ -353,10 +403,7 @@ PROC main
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
 
-	call 	drawpixel, 25, 25, 4
-
-	call	kogelbaan, 40, 35
-
+	call	kogelbaan, 45, 45
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
@@ -373,7 +420,7 @@ DATASEG
 	alpha dd 0.6 		; hoek van de worp
 	g dd 9.81
 
-	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur
+	paletteperso dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur-doelwit-kogel
 
 ; -------------------------------------------------------------------
 ; STACK
