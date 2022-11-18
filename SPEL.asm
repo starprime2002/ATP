@@ -301,9 +301,9 @@ PROC kogelbaan
 		
 		
 		call printUnsignedInteger, ebx
-		call	drawpixel, ebx, eax, 4
-		call wait_VBLANK, 15		; 100 --> 1 seconde
-		call	drawpixel, ebx, eax, 0
+		call	drawpixel, ebx, eax, 4		;de kogel tekenen
+		call wait_VBLANK, 15				; 100 --> 1 seconde
+		call	drawpixel, ebx, eax, 0		;de kogel verdwijnt voor volgende animatie
 
 		cmp eax, 3					; check grondlimiet
 		jle @@einde					; (hou rekening met hoogte kogel)
@@ -318,6 +318,7 @@ PROC kogelbaan
 	ret
 ENDP kogelbaan
 
+;Procedure wait_VBLANK van EXAMPLES\DANCER genomen
 ; wait for @@framecount frames
 PROC wait_VBLANK
 	ARG @@framecount: word
@@ -354,7 +355,7 @@ PROC main
 
 	call 	drawpixel, 25, 25, 4
 
-	call	kogelbaan, 45, 40
+	call	kogelbaan, 40, 35
 
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
