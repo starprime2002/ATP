@@ -18,6 +18,8 @@ VMEMADR EQU 0A0000h	; video memory address
 SCRWIDTH EQU 320	; screen witdth
 SCRHEIGHT EQU 200	; screen height
 
+FRAMECOUNT EQU 1000
+
 ; -------------------------------------------------------------------
 ; CODE
 ; -------------------------------------------------------------------
@@ -267,7 +269,7 @@ PROC kogelbaan
 	mov [@@ax], 0					;          	[2^(-5)-ste van een pixels per tijdseenheid²]
 	mov [@@ay], 9					; NEGATIEF valversnelling (geen 9.81 want FP)	   ""     ""
 
-
+	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	@@tijdsloop:
 		mov eax, [@@dt]
 		add [@@tijd], eax
@@ -294,10 +296,11 @@ PROC kogelbaan
 		mov eax, [@@ypos]
 		mov ebx, [@@xpos]
 
-		call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
-
+		
+		
 		call printUnsignedInteger, ebx
 		call	drawpixel, ebx, eax
+		call wait_VBLANK, 50
 
 		cmp eax, 3					; check grondlimiet
 		jle @@einde					; (hou rekening met hoogte kogel)
@@ -306,12 +309,38 @@ PROC kogelbaan
 		jge @@einde			; (hou rekening met breedte kogel)
 
 		jmp @@tijdsloop
+			
+		
+		
+
+		
 
 
 	@@einde:
 
 	ret
 ENDP kogelbaan
+
+; wait for @@framecount frames
+PROC wait_VBLANK
+	ARG @@framecount: word
+	USES eax, ecx, edx
+	mov dx, 03dah 					; Wait for screen refresh
+	movzx ecx, [@@framecount]
+	
+		@@VBlank_phase1:
+		in al, dx 
+		and al, 8
+		jnz @@VBlank_phase1
+		@@VBlank_phase2:
+		in al, dx 
+		and al, 8
+		jz @@VBlank_phase2
+	loop @@VBlank_phase1
+	
+	ret 
+ENDP wait_VBLANK
+
 
 PROC main
 	sti
@@ -328,7 +357,7 @@ PROC main
 
 	call 	drawpixel, 25, 25
 
-	call	kogelbaan, 40, 30
+	call	kogelbaan, 45, 40
 
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
