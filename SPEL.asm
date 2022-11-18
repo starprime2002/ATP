@@ -18,7 +18,6 @@ VMEMADR EQU 0A0000h	; video memory address
 SCRWIDTH EQU 320	; screen witdth
 SCRHEIGHT EQU 200	; screen height
 
-FRAMECOUNT EQU 1000
 
 ; -------------------------------------------------------------------
 ; CODE
@@ -215,7 +214,7 @@ PROC fillBackground
 ENDP fillBackground
 
 PROC drawpixel
-	ARG @@xcoord:dword ,@@ycoord:dword
+	ARG @@xcoord:dword ,@@ycoord:dword, @@color:byte
 
 	USES eax, ebx
 
@@ -228,7 +227,7 @@ PROC drawpixel
 	imul ebx
 	add edi, eax
 	add edi, [@@xcoord]
-	mov al, 4			; pick the color of the pallet
+	mov al, [@@color]			; pick the color of the pallet
 	
 	mov [edi], al
 	add edi, 1
@@ -274,19 +273,22 @@ PROC kogelbaan
 		mov eax, [@@dt]
 		add [@@tijd], eax
 
+		;vx = ax*dt
 		mov eax, [@@ax]				; ik weet dat ax toch nul is maar in toekomst zal ook windkracht komen
 		mov ebx, [@@dt]				; ik weet ook dat dt toch 1 is (maar zou kunne veranderen) 
 		mul ebx
 		add [@@vx], eax
+		;vy = ay*dt
 		mov eax, [@@ay]
 		mov ebx, [@@dt]
 		mul ebx
 		sub [@@vy], eax
-
+		;xpos = vx*dt 
 		mov eax, [@@vx]
 		mov ebx, [@@dt]
 		mul ebx
 		add [@@xpos], eax
+		;ypos = vy*dt
 		mov eax, [@@vy]
 		mov ebx, [@@dt]
 		imul ebx
@@ -299,8 +301,9 @@ PROC kogelbaan
 		
 		
 		call printUnsignedInteger, ebx
-		call	drawpixel, ebx, eax
-		call wait_VBLANK, 50
+		call	drawpixel, ebx, eax, 4
+		call wait_VBLANK, 15		; 100 --> 1 seconde
+		call	drawpixel, ebx, eax, 0
 
 		cmp eax, 3					; check grondlimiet
 		jle @@einde					; (hou rekening met hoogte kogel)
@@ -309,12 +312,6 @@ PROC kogelbaan
 		jge @@einde			; (hou rekening met breedte kogel)
 
 		jmp @@tijdsloop
-			
-		
-		
-
-		
-
 
 	@@einde:
 
@@ -355,7 +352,7 @@ PROC main
 	call	updatecolorpallete
 	call	fillBackground  ; black = (0,0,0) en white = (63, 63, 63)
 
-	call 	drawpixel, 25, 25
+	call 	drawpixel, 25, 25, 4
 
 	call	kogelbaan, 45, 40
 
