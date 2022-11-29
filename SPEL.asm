@@ -383,7 +383,7 @@ PROC main
 	call	fillBackground
 
 	call	bulletPath, 45, 45
-	call	bulletPath, 25, 25
+	call	bulletPath, 25, 26
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
 	call	terminateProcess
