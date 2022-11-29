@@ -390,32 +390,26 @@ PROC mouseHandler
     USES    eax, ebx, ecx, edx
 	
 	;@@mousepressed:
-	;mov ecx, 0
 	and bl, 1			; check if right button of mouse is clicked
 	jz @@skipit			; only execute if a mousebutton is pressed
- 
+
+	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
+    movzx eax, dx		; get mouse height
+	mov ebx, 149
+	sub ebx, eax
+	mov eax, ebx
+
+	mov ebx,0
+	sar cx, 1			; horizontal cursor position is doubled in input 
+	movzx ebx, cx
+
+
+	call drawline, 25, 25, ebx, eax, 3
+
 	
-	call	bulletPath, 45, 45
-	;check if mouse is still clicked
-	;call wait_VBLANK,2
-	;add ecx,1
-	;call printUnsignedInteger,ecx
-	;cmp ecx, 10
-	;jle @@mousepressed
-
-
-    ;movzx eax, dx		; get mouse height
-	;mov edx, SCRWIDTH
-	;mul edx				; obtain vertical offset in eax
-	;sar cx, 1			; horizontal cursor position is doubled in input 
-	;add ax, cx			; add horizontal offset
-
-	;mov	edi, VMEMADR
-	;add edi,eax	
-	;mov al,3			;color kogel
-	;mov [edi], al
 
 	@@skipit:
+
     ret
 ENDP mouseHandler
 	
@@ -486,7 +480,7 @@ PROC printSignedInteger
 ENDP printSignedInteger
 
 PROC drawline
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@y2:dword
+	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@y2:dword, @@color:dword
 	LOCAL @@P: dword, @@dx:dword, @@dy:dword
 	USES eax, ebx, edx
 
@@ -524,7 +518,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case1a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case1a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 		;b) slope>1, then dx<dy
@@ -537,7 +531,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case1b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case1b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 	;Case 2: dx negative and dy positive, then slope negative
@@ -564,7 +558,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case2a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case2a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 		;b) slope<-1, then dx<dy
@@ -577,7 +571,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case2b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case2b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 
@@ -603,7 +597,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case3a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case3a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 		;b) slope<-1, then dx<dy
@@ -616,7 +610,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case3b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case3b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 	;Case 4: dx negative and dy negative, then slope positive
@@ -641,7 +635,7 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case4a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P]
+		call bl_algorithm_case4a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
 		jmp @@end
 
 		;b) slope>1, then dx<dy
@@ -654,22 +648,22 @@ PROC drawline
 		mov [@@P], eax
 
 		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case4b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P]
-		jmp @@end
+		call bl_algorithm_case4b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
+		
 
 	@@end:
 	ret
 ENDP drawline
 
 PROC bl_algorithm_case1a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color: dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	inc eax							;x1 = x1 + 1
 	
 	push eax
@@ -710,14 +704,14 @@ PROC bl_algorithm_case1a
 ENDP bl_algorithm_case1a
 
 PROC bl_algorithm_case1b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	inc ebx							;y1 = y1 + 1
 	
 	push eax
@@ -760,14 +754,14 @@ PROC bl_algorithm_case1b
 ENDP bl_algorithm_case1b
 
 PROC bl_algorithm_case2a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	dec eax							;x1 = x1 - 1
 	
 	push eax
@@ -808,14 +802,14 @@ PROC bl_algorithm_case2a
 ENDP bl_algorithm_case2a
 
 PROC bl_algorithm_case2b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	inc ebx							;y1 = y1 + 1
 	
 	push eax
@@ -858,14 +852,14 @@ PROC bl_algorithm_case2b
 ENDP bl_algorithm_case2b
 
 PROC bl_algorithm_case3a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	inc eax							;x1 = x1 + 1
 	
 	push eax
@@ -906,14 +900,14 @@ PROC bl_algorithm_case3a
 ENDP bl_algorithm_case3a
 
 PROC bl_algorithm_case3b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	dec ebx							;y1 = y1 - 1
 	
 	push eax
@@ -956,14 +950,14 @@ PROC bl_algorithm_case3b
 ENDP bl_algorithm_case3b
 
 PROC bl_algorithm_case4a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	dec eax							;x1 = x1 - 1
 	
 	push eax
@@ -1004,14 +998,14 @@ PROC bl_algorithm_case4a
 ENDP bl_algorithm_case4a
 
 PROC bl_algorithm_case4b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword
+	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
 	USES eax, ebx, edx
 
 	mov eax, [@@x1]
 	mov ebx, [@@y1]
 
 	@@whileloop:
-	call drawPixel, eax,ebx, 3
+	call drawPixel, eax,ebx, [@@color]
 	dec ebx							;y1 = y1 - 1
 	
 	push eax
@@ -1053,6 +1047,11 @@ PROC bl_algorithm_case4b
 	ret
 ENDP bl_algorithm_case4b
 
+PROC moveline
+
+	ret
+ENDP moveline
+
 PROC main
 	sti
 	cld
@@ -1065,29 +1064,12 @@ PROC main
 	call	setVideoMode, 13h
 	finit	; initialize FPU
 
-	;call mouse_install, offset mouseHandler
+	call mouse_install, offset mouseHandler
 	;call mouse_install, offset getcoordmouse
 	
 	
 	call	updateColorpallete
 	call	fillBackground
-
-	call drawline, 25, 25, 100, 25 
-	call drawline, 25, 25, 50, 100
-	call drawline, 25, 25, 100, 50  
-	call drawline, 25, 25, 100, 100 
-	call drawline, 25, 25, 25, 100
-	call drawline, 25, 25, -75, 50
-	call drawline, 25, 25, -25, 100
-	call drawline, 25, 25, 100, -25
-	call drawline, 25, 25, 50, -25
-	call drawline, 25, 25, -25, 0
-	call drawline, 25, 25, 0, -25
-
-
-
-
-
 
 	;call	bulletPath, 45, 45
 	;call	bulletPath, 25, 25
