@@ -18,7 +18,7 @@ VMEMADR EQU 0A0000h     ; video memory address
 SCRWIDTH EQU 320        ; screen witdth 
 SCRHEIGHT EQU 200       ; screen height 
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
-FRAQBIT EQU 100         ; fractionele bit  
+FRAQBIT EQU 128         ; fractionele bit  
 
 
 CODESEG 
@@ -322,13 +322,65 @@ PROC moveBullet                             ; input zijn in fractionele bits
     ret
 ENDP moveBullet
 
-;procedure om de baan te berekenen
+; Checks    if the bullet collided with wall or ground
+;           if the bullet is out of border
+PROC checkCollision
+    ARG @@xpos:dword, @@ypos:dword RETURNS cl
+    USES eax, ebx
+
+    mov eax, [@@xpos]
+    mov ebx, [@@ypos]
+    xor ecx, ecx
+
+    @@groundCheck:
+        cmp ebx, 2*FRAQBIT
+        jg @@wallCheck
+        mov cl, 1
+        jmp @@collisionEnd
+
+    @@wallCheck:                        ; Wall = (300,0)-(309,99)
+        cmp eax, 297*FRAQBIT
+        jl @@upperCheck
+        cmp eax, 319*FRAQBIT
+        jg @@upperCheck
+        cmp ebx, 101*FRAQBIT
+        jg @@upperCheck
+        mov cl, 2
+        jmp @@collisionEnd
+
+    @@upperCheck:
+        cmp ebx, 150*FRAQBIT
+        jl @@leftBoundCheck
+        mov cl, 3
+        jmp @@collisionEnd
+    
+    @@leftBoundCheck:
+        cmp eax, 0*FRAQBIT
+        jge @@rightBoundCheck
+        mov cl, 4
+        jmp @@collisionEnd
+
+    @@rightBoundCheck:
+        cmp eax, 320*FRAQBIT
+        jl @@noCollision
+        mov cl, 5
+        jmp @@collisionEnd
+
+    @@noCollision:
+        mov cl, 0
+        jmp @@collisionEnd
+
+    @@collisionEnd:
+    ret
+ENDP checkCollision
+
+;Initialize a throw
 PROC bulletPath
     ARG @@vxbegin:dword, @@vybegin:dword
     LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
-    USES eax, ebx, edx
+    USES eax, ebx, ecx, edx
 
-    mov [@@dt], 32                  ; [1/time unit] we work with the inverse to dodge decimal points
+    mov [@@dt], 16                  ; [1/time unit] we work with the inverse to dodge decimal points
     mov eax, 25*FRAQBIT             ; startingposition
     mov ebx, 25*FRAQBIT             ; [pixels * distance/pixels]
     push eax
@@ -346,8 +398,8 @@ PROC bulletPath
     mov [@@ay], -10*FRAQBIT         ;[distance/time²] downward accelaration due to "gravity" -9.81 = -10 here
 
     call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos]
-    ;call waitForSpecificKeystroke, 001Bh 
 
+    xor ecx, ecx
     @@tijdsloop: 
 
         ;xpos += vx*dt
@@ -381,7 +433,7 @@ PROC bulletPath
         mov edx, ALLONES
         @@positiveax:
         mov edx, 0 
-        div ebx
+        idiv ebx
         add [@@vx], eax
         ;vy += ay*dt 
         mov eax, [@@ay]
@@ -396,16 +448,12 @@ PROC bulletPath
         add [@@vy], eax
  
 
-        ;Checks wall collision
-        mov eax, [@@xpos] 
-        cmp eax, (300-3)*FRAQBIT                ; hou rekening met breedte (kogel 3 pixels)
-        jge @@endWall
+        call checkCollision, [@@xpos], [@@ypos]
+        call printSignedInteger, ecx
+        cmp ecx, 0
+        jg @@endPath
+
         
-		;Checks ground collision
-        mov ebx, [@@ypos]
-        cmp ebx, 2*FRAQBIT                      ; (hou rekening met hoogte kogel)
-        jle @@endGround
- 
         ;Bring back old coordinations
         pop ebx
         pop eax
@@ -422,19 +470,8 @@ PROC bulletPath
                                                 ; = FRAQBITS time unit
         jmp @@tijdsloop 
 
-        @@endWall:
-            ;Bring back old coordinations
-            pop ebx
-            pop eax
-            call moveBullet, eax, ebx, (300-3)*FRAQBIT, ebx
-            jmp @@end
-        @@endGround:
-            ;Bring back old coordinations
-            pop ebx
-            pop eax
-            call moveBullet, eax, ebx, eax, 2*FRAQBIT
-        @@end:
 
+        @@endPath:
     ret 
 ENDP bulletPath 
 
@@ -452,7 +489,7 @@ PROC main
     call    fillBackground
 
 
-    call    bulletPath, 38, 38
+    call    bulletPath, 10, 40
 
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
     call    terminateProcess
