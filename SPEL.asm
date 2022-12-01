@@ -88,6 +88,16 @@ PROC printSignedInteger
     ret
 ENDP printSignedInteger 
 
+PROC printString
+    ARG @@string:dword
+    USES eax, edx
+        mov ah, 09h
+        mov edx, [@@string]
+        int 21h
+
+	ret
+ENDP printString
+
 ; Terminate the program. 
 PROC terminateProcess
     USES eax 
@@ -325,7 +335,7 @@ ENDP moveBullet
 ; Checks    if the bullet collided with wall or ground
 ;           if the bullet is out of border
 PROC checkCollision
-    ARG @@xpos:dword, @@ypos:dword RETURNS cl
+    ARG @@xpos:dword, @@ypos:dword RETURNS ecx
     USES eax, ebx
 
     mov eax, [@@xpos]
@@ -335,44 +345,105 @@ PROC checkCollision
     @@groundCheck:
         cmp ebx, 2*FRAQBIT
         jg @@wallCheck
-        mov cl, 1
+        mov ecx, 1
         jmp @@collisionEnd
-
     @@wallCheck:                        ; Wall = (300,0)-(309,99)
         cmp eax, 297*FRAQBIT
         jl @@upperCheck
         cmp eax, 319*FRAQBIT
         jg @@upperCheck
-        cmp ebx, 101*FRAQBIT
-        jg @@upperCheck
-        mov cl, 2
+        cmp ebx, 100*FRAQBIT
+        jg @@wall2Check
+        mov ecx, 2
         jmp @@collisionEnd
-
+    @@wall2Check:                        ; Wall = (300,0)-(309,99)
+        cmp ebx, 102*FRAQBIT
+        jg @@upperCheck
+        mov ecx, 3
+        jmp @@collisionEnd        
     @@upperCheck:
         cmp ebx, 150*FRAQBIT
         jl @@leftBoundCheck
-        mov cl, 3
+        mov ecx, 4
         jmp @@collisionEnd
-    
     @@leftBoundCheck:
         cmp eax, 0*FRAQBIT
         jge @@rightBoundCheck
-        mov cl, 4
+        mov ecx, 5
         jmp @@collisionEnd
-
     @@rightBoundCheck:
         cmp eax, 320*FRAQBIT
         jl @@noCollision
-        mov cl, 5
+        mov ecx, 6
         jmp @@collisionEnd
-
     @@noCollision:
-        mov cl, 0
+        mov ecx, 0
         jmp @@collisionEnd
 
     @@collisionEnd:
     ret
 ENDP checkCollision
+
+; To replace bulllet once collided
+PROC replaceBullet
+    ARG @@collisionType:byte, @@oldXpos:dword, @@oldYpos:dword
+    LOCAL @@waittime:dword
+
+    mov [@@waittime], 50
+
+    cmp ecx, 1
+    je @@groundCase
+    cmp ecx, 2
+    je @@wallCase
+    cmp ecx, 3
+    je @@wall2Case
+    cmp ecx, 4
+    je @@upperLimitCase
+    cmp ecx, 5
+    je @@leftLimitCase
+    cmp ecx, 6
+    je @@rightLimitCase
+
+    @@groundCase:
+        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 2*FRAQBIT
+        call printString, offset msgGround
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, [@@oldXpos], 2*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+    @@wallCase:
+        call moveBullet, [@@oldXpos], [@@oldYpos], 297*FRAQBIT, [@@oldYpos]
+        call printString, offset msgWall
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, 297*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+    @@wall2Case:
+        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 101*FRAQBIT
+        call printString, offset msgWall
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, [@@oldXpos], 101*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+    @@upperLimitCase:
+        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 149*FRAQBIT
+        call printString, offset msgTooHigh
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, [@@oldXpos], 149*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+    @@leftLimitCase:
+        call moveBullet, [@@oldXpos], [@@oldYpos], 0, [@@oldYpos]
+        call printString, offset msgOutOfBound
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, 0, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+    @@rightLimitCase:
+        call moveBullet, [@@oldXpos], [@@oldYpos], 317*FRAQBIT, [@@oldYpos]
+        call printString, offset msgOutOfBound
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, 319*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+
+    @@endReplacement:
+    ret
+ENDP replaceBullet
 
 ;Initialize a throw
 PROC bulletPath
@@ -389,10 +460,10 @@ PROC bulletPath
     mov [@@ypos], ebx               ;[distance unit]
     mov ebx, FRAQBIT
     mov eax, [@@vxbegin]            ;[distance/time]
-    mul ebx
+    imul ebx
     mov [@@vx], eax                 ;[pixels/time]
     mov eax, [@@vybegin]            ;[distance/time]
-    mul ebx
+    imul ebx
     mov [@@vy], eax
     mov [@@ax], 0                   ;[distance/time²]
     mov [@@ay], -10*FRAQBIT         ;[distance/time²] downward accelaration due to "gravity" -9.81 = -10 here
@@ -410,7 +481,6 @@ PROC bulletPath
         jge @@positivevx
         mov edx, ALLONES
         @@positivevx:
-        mov edx, 0
         idiv ebx
         add [@@xpos], eax
         ;ypos += vy*dt
@@ -449,11 +519,10 @@ PROC bulletPath
  
 
         call checkCollision, [@@xpos], [@@ypos]
-        call printSignedInteger, ecx
         cmp ecx, 0
-        jg @@endPath
+        jne @@endPath
 
-        
+    
         ;Bring back old coordinations
         pop ebx
         pop eax
@@ -472,6 +541,10 @@ PROC bulletPath
 
 
         @@endPath:
+        ;Bring back old coordinations
+        pop ebx
+        pop eax
+        call replaceBullet, ecx, eax, ebx
     ret 
 ENDP bulletPath 
 
@@ -488,8 +561,7 @@ PROC main
     call    updateColorpallete
     call    fillBackground
 
-
-    call    bulletPath, 10, 40
+    call    bulletPath, 34, 49
 
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
     call    terminateProcess
@@ -499,7 +571,11 @@ ENDP main
 ; -------------------------------------------------------------------
 ; DATA
 ; ------------------------------------------------------------------- 
-DATASEG 
+DATASEG
+	msgGround	    db "On the ground!", 13, 10, '$'
+	msgWall	        db "Miss!", 13, 10, '$'
+	msgTooHigh	    db "Too high!", 13, 10, '$'
+    msgOutOfBound   db "Out of bound!", 13, 10, '$'
     palette dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36              ; lucht-gras-muur-doelwit-kogel
 
 ; -------------------------------------------------------------------
