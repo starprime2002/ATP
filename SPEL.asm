@@ -388,8 +388,9 @@ ENDP bulletPath
 ; ----------------------------------------------------------------------------
 PROC mouseHandler
     USES    eax, ebx, ecx, edx
-	
-	;@@mousepressed:
+	LOCAL @@oldXpos: dword, @@oldYpos: dword, @@newXpos: dword, @@newYpos: dword
+
+	@@mousepressed:
 	and bl, 1			; check if right button of mouse is clicked
 	jz @@skipit			; only execute if a mousebutton is pressed
 
@@ -404,7 +405,24 @@ PROC mouseHandler
 	movzx ebx, cx
 
 
-	call drawline, 25, 25, ebx, eax, 3
+
+	mov [@@newXpos], ebx
+	mov [@@newYpos], eax
+
+	pop ebx
+	pop eax
+
+	mov [@@oldXpos], ebx
+	mov [@@oldYpos], eax
+	
+	;call printSignedInteger, ebx
+	;call printSignedInteger, eax
+	call moveline, ebx, eax, [@@newXpos], [@@newYpos], 99
+
+	;store old mouse coordinates
+	push eax
+	push ebx
+
 
 	
 
@@ -412,28 +430,7 @@ PROC mouseHandler
 
     ret
 ENDP mouseHandler
-	
 
-PROC getcoordmouse
-	USES    eax, ebx, ecx, edx
-
-	and bl, 2			; check if right button of mouse is clicked
-	jz @@skip			; only execute if a mousebutton is pressed
-
-	movzx eax, dx		; get mouse height
-	mov edx, SCRWIDTH
-	mul edx				; obtain vertical offset in eax
-	sar cx, 1			; horizontal cursor position is doubled in input 
-	add ax, cx			; add horizontal offset
-
-	mov	edi, VMEMADR
-	add edi,eax	
-	mov al,3			;color kogel
-	mov [edi], al
-	
-	@@skip:
-    ret
-ENDP getcoordmouse
 
 
 PROC printSignedInteger
@@ -479,10 +476,11 @@ PROC printSignedInteger
 	ret
 ENDP printSignedInteger
 
+
 PROC drawline
 	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@y2:dword, @@color:dword
-	LOCAL @@P: dword, @@dx:dword, @@dy:dword
-	USES eax, ebx, edx
+	LOCAL @@dx:dword, @@dy:dword, @@P:dword, @@count:dword, @@xoperator: dword, @@yoperator: dword
+	USES eax, ebx,ecx, edx
 
 	;dx = x2 - x1
 	mov eax, [@@x2]
@@ -494,139 +492,77 @@ PROC drawline
 	sub eax, [@@y1]
 	mov [@@dy], eax
 
+
 	;Case 1: dx positive and dy positive, then slope positive 
 	@@case1:
-	cmp [@@dx], 0
-	jl @@case2
-	cmp [@@dy],0
-	jl @@case3
+		cmp [@@dx], 0
+		jl @@case2
+		cmp [@@dy],0
+		jl @@case3
 
-		
-		mov eax, [@@dx]
-		mov ebx, [@@dy]
-		cmp eax, ebx
-		jge @@slope_less_or_equal_1a
-		jmp @@slope_greater_1a
+		;dx pos: xoperator = +1
+		mov [@@xoperator], 1
+		;dy pos: operator = +1
+		mov [@@yoperator], 1
 
-		;a) slope<=1, then dx>=dy
-		@@slope_less_or_equal_1a:
-		;P = 2dy - dx
-		mov eax, [@@dy]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dx]
-		mov [@@P], eax
+		;Compare dx an dy	
+		jmp @@compare_dx_and_dy
 
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case1a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
-
-		;b) slope>1, then dx<dy
-		@@slope_greater_1a:
-		;P = 2dx - dy
-		mov eax, [@@dx]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dy]
-		mov [@@P], eax
-
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case1b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
 
 	;Case 2: dx negative and dy positive, then slope negative
 	@@case2:
-	cmp [@@dy],0
-	jl @@case4
+		cmp [@@dy],0
+		jl @@case4
 
-	;first negate dx to make it positive
-	neg [@@dx]
+		;dx neg: xoperator = -1
+		mov [@@xoperator], -1
+		;dy pos: operator = +1
+		mov [@@yoperator], 1
 
-		mov eax, [@@dx]
-		mov ebx, [@@dy]
-		cmp eax, ebx
-		jge @@slope_greater_or_equal_minus_1a
-		jmp @@slope_less_minus_1a
+		;negate dx to make it positive
+		neg [@@dx]
 
-		;a) slope>=-1, then dx>=dy
-		@@slope_greater_or_equal_minus_1a:
-		;P = 2dy - dx
-		mov eax, [@@dy]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dx]
-		mov [@@P], eax
-
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case2a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
-
-		;b) slope<-1, then dx<dy
-		@@slope_less_minus_1a:
-		;P = 2dx - dy
-		mov eax, [@@dx]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dy]
-		mov [@@P], eax
-
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case2b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
-
-
+		;Compare dx an dy	
+		jmp @@compare_dx_and_dy
 
 	;Case 3: dx positive and dy negative, then slope negative
 	@@case3:
-	;first negate dy to make it positive
-	neg [@@dy]
+		;dx pos: xoperator = +1
+		mov [@@xoperator], 1
+		;dy neg: operator = -1
+		mov [@@yoperator], -1
 
-		mov eax, [@@dx]
-		mov ebx, [@@dy]
-		cmp eax, ebx
-		jge @@slope_greater_or_equal_minus_1b
-		jmp @@slope_less_minus_1b
+		;negate dy to make it positive
+		neg [@@dy]
 
-		;a) slope>=-1, then dx>=dy
-		@@slope_greater_or_equal_minus_1b:
-		;P = 2dy - dx
-		mov eax, [@@dy]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dx]
-		mov [@@P], eax
-
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case3a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
-
-		;b) slope<-1, then dx<dy
-		@@slope_less_minus_1b:
-		;P = 2dx - dy
-		mov eax, [@@dx]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dy]
-		mov [@@P], eax
-
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case3b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
+		;Compare dx an dy	
+		jmp @@compare_dx_and_dy
 
 	;Case 4: dx negative and dy negative, then slope positive
 	@@case4:
-	;first negate dx and dy to make them positive
-	neg [@@dx]
-	neg [@@dy]
+		;dx pos: xoperator = -1
+		mov [@@xoperator], -1
+		;dy pos: operator = -1
+		mov [@@yoperator], -1
 
+		;negate dx and dy to make them positive
+		neg [@@dx]
+		neg [@@dy]
+
+		;Compare dx an dy	
+		jmp @@compare_dx_and_dy
+
+	;Compare dx an dy: if dx>=dy then slope<=1, if dx<dy then slope>1	
+	@@compare_dx_and_dy:
 		mov eax, [@@dx]
 		mov ebx, [@@dy]
 		cmp eax, ebx
-		jge @@slope_less_or_equal_1b
-		jmp @@slope_greater_1b
+		jge @@slope_less_or_equal_1
+		jmp @@slope_greater_1 
 
-		;a) slope<=1, then dx>=dy
-		@@slope_less_or_equal_1b:
+
+	;a) slope<=1, dx>=dy
+	@@slope_less_or_equal_1:
 		;P = 2dy - dx
 		mov eax, [@@dy]
 		mov ebx, 2
@@ -634,12 +570,53 @@ PROC drawline
 		sub eax, [@@dx]
 		mov [@@P], eax
 
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case4a, [@@x1], [@@y1], [@@x2], [@@dx], [@@dy], [@@P], [@@color]
-		jmp @@end
+		;count = dx
+		mov eax, [@@dx]
+		mov [@@count], eax
 
-		;b) slope>1, then dx<dy
-		@@slope_greater_1b:
+		;initialize
+		mov eax, [@@x1]
+		mov ebx, [@@y1]
+		mov ecx, [@@count]	;dx of dy, afh van de rico	
+
+		@@bl_loop1:
+			call drawPixel, eax,ebx, [@@color]
+			
+			add eax, [@@xoperator]
+
+			push eax
+			push ebx
+
+			cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy ;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
+			jl @@Pkleinerdan0_1
+			
+			call P_positive, [@@P], [@@dx], [@@dy]
+			mov [@@P], eax
+			
+			pop ebx 
+			pop eax 
+
+			add ebx, [@@yoperator]
+
+			loop @@bl_loop1
+			jmp @@end
+
+			@@Pkleinerdan0_1:
+			;if count = dx: y1 = y1 and P = P + 2*dy
+			;if count = dy: x1 = x1 and P = P + 2*dx
+
+			call P_negative, [@@P], [@@dy]
+			mov [@@P], eax
+
+			pop ebx
+			pop eax
+
+			loop @@bl_loop1
+			jmp @@end
+
+
+	;b) slope>1, dx<dy
+	@@slope_greater_1:
 		;P = 2dx - dy
 		mov eax, [@@dx]
 		mov ebx, 2
@@ -647,31 +624,61 @@ PROC drawline
 		sub eax, [@@dy]
 		mov [@@P], eax
 
-		;draw line with bresenham's line algorithm 
-		call bl_algorithm_case4b, [@@x1], [@@y1], [@@y2], [@@dx], [@@dy], [@@P], [@@color]
-		
+		;count = dy
+		mov eax, [@@dy]
+		mov [@@count], eax
+
+		;initialize
+		mov eax, [@@x1]
+		mov ebx, [@@y1]
+		mov ecx, [@@count]	;dx of dy, afh van de rico	
+
+
+		@@bl_loop2:
+			call drawPixel, eax,ebx, [@@color]
+
+			add ebx, [@@yoperator]
+
+			push eax
+			push ebx
+
+			cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy ;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
+			jl @@Pkleinerdan0_2
+			
+			call P_positive, [@@P], [@@dy], [@@dx]
+			mov [@@P], eax
+			
+			pop ebx 
+			pop eax 
+
+			add eax, [@@xoperator]
+
+			loop @@bl_loop2
+			jmp @@end
+
+			@@Pkleinerdan0_2:
+			;if count = dx: y1 = y1 and P = P + 2*dy
+			;if count = dy: x1 = x1 and P = P + 2*dx
+			call P_negative, [@@P], [@@dx]
+			mov [@@P], eax
+
+			pop ebx
+			pop eax
+
+			loop @@bl_loop2
+			jmp @@end
+
 
 	@@end:
+
 	ret
 ENDP drawline
 
-PROC bl_algorithm_case1a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color: dword
-	USES eax, ebx, edx
 
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	inc eax							;x1 = x1 + 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dy]					;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
+PROC P_positive ;P = P + 2*dy - 2*dx
+	ARG @@P: dword, @@dx: dword, @@dy: dword RETURNS eax
+	USES ebx
+	mov eax, [@@dy]					
 	mov ebx, 2
 	mul ebx
 	add [@@P], eax
@@ -680,374 +687,38 @@ PROC bl_algorithm_case1a
 	mov ebx, 2
 	mul ebx
 	sub [@@P], eax 
-	
-	pop ebx 
-	pop eax 
-	inc ebx
-	
-	cmp eax, [@@x2]
-	jle @@whileloop
-	jmp @@ending
 
-	@@Pkleinerdan0:
+	mov eax, [@@P]
+	
+	ret
+ENDP P_positive
+	
+PROC P_negative ;P = P + 2*dy 
+	ARG @@P: dword, @@dy: dword	RETURNS eax
+	USES ebx
+
 	mov eax, [@@dy]
 	mov ebx, 2
 	mul ebx
 	add [@@P], eax	
-	pop ebx
-	pop eax
-	cmp eax, [@@x2]
-	jle @@whileloop
 
-	@@ending:
+	mov eax, [@@P]
+	;call printSignedInteger, eax
+
 	ret
-ENDP bl_algorithm_case1a
+ENDP P_negative
 
-PROC bl_algorithm_case1b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	inc ebx							;y1 = y1 + 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: x1 = x1 and P = P + 2*dx
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dx]					;if P>0: x1 = x1 + 1 and P = P + 2*dx - 2*dy
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax ; P=-2
-	
-	pop ebx ; 0
-	pop eax ; 1
-	inc eax
-	
-	cmp ebx, [@@y2]
-	jle @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-	pop ebx
-	pop eax
-
-	cmp ebx, [@@y2]
-	jle @@whileloop
-	
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case1b
-
-PROC bl_algorithm_case2a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	dec eax							;x1 = x1 - 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dy]					;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax 
-	
-	pop ebx 
-	pop eax 
-	inc ebx
-	
-	cmp eax, [@@x2]
-	jge @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax	
-	pop ebx
-	pop eax
-	cmp eax, [@@x2]
-	jge @@whileloop
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case2a
-
-PROC bl_algorithm_case2b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	inc ebx							;y1 = y1 + 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: x1 = x1 and P = P + 2*dx
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dx]					;if P>0: x1 = x1 - 1 and P = P + 2*dx - 2*dy
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax ; P=-2
-	
-	pop ebx ; 0
-	pop eax ; 1
-	dec eax
-	
-	cmp ebx, [@@y2]
-	jle @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-	pop ebx
-	pop eax
-
-	cmp ebx, [@@y2]
-	jle @@whileloop
-	
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case2b
-
-PROC bl_algorithm_case3a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	inc eax							;x1 = x1 + 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dy]					;if P>0: y1 = y1 - 1 and P = P + 2*dy - 2*dx
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax 
-	
-	pop ebx 
-	pop eax 
-	dec ebx
-	
-	cmp eax, [@@x2]
-	jle @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax	
-	pop ebx
-	pop eax
-	cmp eax, [@@x2]
-	jle @@whileloop
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case3a
-
-PROC bl_algorithm_case3b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	dec ebx							;y1 = y1 - 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: x1 = x1 and P = P + 2*dx
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dx]					;if P>0: x1 = x1 + 1 and P = P + 2*dx - 2*dy
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax ; P=-2
-	
-	pop ebx ; 0
-	pop eax ; 1
-	inc eax
-	
-	cmp ebx, [@@y2]
-	jge @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-	pop ebx
-	pop eax
-
-	cmp ebx, [@@y2]
-	jge @@whileloop
-	
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case3b
-
-PROC bl_algorithm_case4a
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	dec eax							;x1 = x1 - 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dy]					;if P>0: y1 = y1 - 1 and P = P + 2*dy - 2*dx
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax 
-	
-	pop ebx 
-	pop eax 
-	dec ebx
-	
-	cmp eax, [@@x2]
-	jge @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax	
-	pop ebx
-	pop eax
-	cmp eax, [@@x2]
-	jge @@whileloop
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case4a
-
-PROC bl_algorithm_case4b
-	ARG @@x1:dword, @@y1:dword, @@y2:dword, @@dx:dword, @@dy:dword, @@P:dword, @@color:dword
-	USES eax, ebx, edx
-
-	mov eax, [@@x1]
-	mov ebx, [@@y1]
-
-	@@whileloop:
-	call drawPixel, eax,ebx, [@@color]
-	dec ebx							;y1 = y1 - 1
-	
-	push eax
-	push ebx
-	cmp [@@P], 0					;if P<0: x1 = x1 and P = P + 2*dx
-	jl @@Pkleinerdan0
-	
-	mov eax, [@@dx]					;if P>0: x1 = x1 - 1 and P = P + 2*dx - 2*dy
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax ; P=-2
-	
-	pop ebx ; 0
-	pop eax ; 1
-	dec eax
-	
-	cmp ebx, [@@y2]
-	jge @@whileloop
-	jmp @@ending
-
-	@@Pkleinerdan0:
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-	pop ebx
-	pop eax
-
-	cmp ebx, [@@y2]
-	jge @@whileloop
-	
-
-	@@ending:
-	ret
-ENDP bl_algorithm_case4b
 
 PROC moveline
+	ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos: dword
+	USES eax, ebx, ecx, edx
+	mov eax, [@@newXpos]
+	mov ebx, [@@newYpos]
+	mov ecx, [@@oldXpos]
+	mov edx, [@@oldYpos]
+	call fillBackground
+	;call drawline, 25, 25, ecx, edx, 0
+	call drawline, 25, 25, eax, ebx, 99
 
 	ret
 ENDP moveline
@@ -1064,18 +735,25 @@ PROC main
 	call	setVideoMode, 13h
 	finit	; initialize FPU
 
-	call mouse_install, offset mouseHandler
+	
 	;call mouse_install, offset getcoordmouse
 	
 	
 	call	updateColorpallete
 	call	fillBackground
-
+	call drawPixel, 0, 300, 99
 	;call	bulletPath, 45, 45
 	;call	bulletPath, 25, 25
+	call 	mouse_install, offset mouseHandler
+	
+
+
+
+
+
 
 	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
-	call mouse_uninstall
+	call 	mouse_uninstall
 	call	terminateProcess
 ENDP main
 ; -------------------------------------------------------------------
