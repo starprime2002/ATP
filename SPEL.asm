@@ -308,7 +308,7 @@ PROC bulletPath
 
 	call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos] 
 	call	waitForSpecificKeystroke, 001Bh
-	;call mouse_install, offset mouseHandler
+
 	@@tijdsloop:
 		mov eax, [@@dt]
 		add [@@tijd], eax
@@ -408,16 +408,20 @@ PROC mouseHandler
 
 	mov [@@newXpos], ebx
 	mov [@@newYpos], eax
+	;call printSignedInteger, ebx
+	;call printSignedInteger, eax
 
 	pop ebx
 	pop eax
 
+	;call printSignedInteger, ebx
+	;call printSignedInteger, eax
+
 	mov [@@oldXpos], ebx
 	mov [@@oldYpos], eax
 	
-	;call printSignedInteger, ebx
-	;call printSignedInteger, eax
-	call moveline, ebx, eax, [@@newXpos], [@@newYpos], 99
+	
+	call moveline, ebx, eax, [@@newXpos], [@@newYpos]
 
 	;store old mouse coordinates
 	push eax
@@ -431,6 +435,46 @@ PROC mouseHandler
     ret
 ENDP mouseHandler
 
+PROC save_mousecoord
+	USES eax, ebx
+
+	@@mousepressed:
+	and bl, 1			; check if right button of mouse is clicked
+	jz @@skipit			; only execute if a mousebutton is pressed
+
+	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
+    movzx eax, dx		; get mouse height
+	mov ebx, 149
+	sub ebx, eax
+	mov eax, ebx
+
+	mov ebx,0
+	sar cx, 1			; horizontal cursor position is doubled in input 
+	movzx ebx, cx
+
+	;call printSignedInteger, eax
+	;call printSignedInteger, ebx
+	call appendList,offset arrlen_mousecoord, eax
+	call appendList, offset arrlen_mousecoord, ebx
+	;call printIntList, offset arrlen_mousecoord
+
+	@@skipit:
+	
+	
+	ret
+
+
+ENDP save_mousecoord
+
+PROC Hello
+	;RETURNS eax, ebx
+	
+	mov ebx, 1
+	mov eax, 10
+	add eax, ebx
+
+	ret
+ENDP Hello
 
 
 PROC printSignedInteger
@@ -577,7 +621,16 @@ PROC drawline
 		;initialize
 		mov eax, [@@x1]
 		mov ebx, [@@y1]
-		mov ecx, [@@count]	;dx of dy, afh van de rico	
+		mov ecx, [@@count]
+
+		;---------------------------------------------------
+		;bresenham's line algorithm:
+		;This algorithm is used to draw a line between two points (x1, y1) and (x2, y2). 
+		;If the slope <=1, xoperator (which can be +1 (increment) or -1 (decrement), dependent of dx) is added to x1.
+		;if P<0: y1 = y1 and P = P + 2*dy 
+		;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
+		; The loop goes on until x1 has reached x2 or until dx is zero.
+		;---------------------------------------------------
 
 		@@bl_loop1:
 			call drawPixel, eax,ebx, [@@color]
@@ -587,7 +640,7 @@ PROC drawline
 			push eax
 			push ebx
 
-			cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy ;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
+			cmp [@@P], 0					
 			jl @@Pkleinerdan0_1
 			
 			call P_positive, [@@P], [@@dx], [@@dy]
@@ -602,9 +655,6 @@ PROC drawline
 			jmp @@end
 
 			@@Pkleinerdan0_1:
-			;if count = dx: y1 = y1 and P = P + 2*dy
-			;if count = dy: x1 = x1 and P = P + 2*dx
-
 			call P_negative, [@@P], [@@dy]
 			mov [@@P], eax
 
@@ -631,9 +681,16 @@ PROC drawline
 		;initialize
 		mov eax, [@@x1]
 		mov ebx, [@@y1]
-		mov ecx, [@@count]	;dx of dy, afh van de rico	
+		mov ecx, [@@count]	
 
-
+		;---------------------------------------------------
+		;bresenham's line algorithm:
+		;This algorithm is used to draw a line between two points (x1, y1) and (x2, y2). 
+		;If the slope >1, yoperator (which can be +1 (increment) or -1 (decrement), dependent of dx) is added to y1.
+		;if P<0: x1 = x1 and P = P + 2*dx 
+		;if P>0: x1 = x1 + 1 and P = P + 2*dx - 2*dy
+		; The loop goes on until y1 has reached y2 or until dy is zero.
+		;---------------------------------------------------
 		@@bl_loop2:
 			call drawPixel, eax,ebx, [@@color]
 
@@ -642,7 +699,7 @@ PROC drawline
 			push eax
 			push ebx
 
-			cmp [@@P], 0					;if P<0: y1 = y1 and P = P + 2*dy ;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
+			cmp [@@P], 0					
 			jl @@Pkleinerdan0_2
 			
 			call P_positive, [@@P], [@@dy], [@@dx]
@@ -657,8 +714,6 @@ PROC drawline
 			jmp @@end
 
 			@@Pkleinerdan0_2:
-			;if count = dx: y1 = y1 and P = P + 2*dy
-			;if count = dy: x1 = x1 and P = P + 2*dx
 			call P_negative, [@@P], [@@dx]
 			mov [@@P], eax
 
@@ -723,6 +778,103 @@ PROC moveline
 	ret
 ENDP moveline
 
+PROC printIntList
+	ARG	@@arrayptr:dword
+	USES eax, ebx, ecx, edx
+	
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+
+	cmp ecx, 0				; if length is 0, skip
+	je @@end
+
+	
+	mov	ah, 2h 		; Function for printing single characters.
+@@printInt:
+	add ebx, 4	; go to next integer
+	call printSignedInteger, [dword ptr ebx]
+	loop @@printInt	; loop over all integers
+	
+	mov	dl, 0Dh		; Carriage return.
+	int	21h
+	mov	dl, 0Ah		; New line.
+	int 21h
+	
+	@@end:
+	ret
+ENDP
+
+PROC appendList
+	ARG @@arrayptr:dword, @@new_value: dword
+	USES eax, ebx, ecx, edx
+
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	add  [dword ptr ebx], 1	; add 1 to the actual value of arrlen_mouse for the print procedure later
+	add ecx, 1	;add 1 to counter of this loop
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+
+	mov eax, [@@new_value]
+	mov [dword ptr ebx], eax	; putting the new value after the last element of the list
+
+	ret
+
+ENDP appendList
+
+PROC get_X1_ofList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	;mov ecx, [ebx]			; get length counter in ecx
+	add ebx, 4
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_X1_ofList
+
+PROC get_X2_ofList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 4
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_X2_ofList
+
+PROC get_Y1_ofList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	;mov ecx, [ebx]			; get length counter in ecx
+	add ebx, 8
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_Y1_ofList
+
+PROC get_Y2_ofList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_Y2_ofList
+
+
+
 PROC main
 	sti
 	cld
@@ -734,17 +886,47 @@ PROC main
 
 	call	setVideoMode, 13h
 	finit	; initialize FPU
-
-	
-	;call mouse_install, offset getcoordmouse
-	
 	
 	call	updateColorpallete
 	call	fillBackground
 	call drawPixel, 0, 300, 99
 	;call	bulletPath, 45, 45
 	;call	bulletPath, 25, 25
-	call 	mouse_install, offset mouseHandler
+	
+	;call 	printIntList, offset arrlen_mousecoord
+
+	;Create a list starting from the adress after the adress of arrlen_mousecoord
+	call	appendList, offset arrlen_mousecoord, 20
+	call	appendList, offset arrlen_mousecoord, 39
+	call	appendList, offset arrlen_mousecoord, 44
+	call	appendList, offset arrlen_mousecoord, 7
+	call	appendList, offset arrlen_mousecoord, 56
+	call	appendList, offset arrlen_mousecoord, 92
+	call	appendList, offset arrlen_mousecoord, 43
+	call	appendList, offset arrlen_mousecoord, 78
+	call	appendList, offset arrlen_mousecoord, 67
+	call 	printIntList, offset arrlen_mousecoord
+
+	;X1 is the first element of the list
+	call get_X1_ofList, offset arrlen_mousecoord
+	call printSignedInteger, eax
+
+	;X2 is the second last element of the list
+	call get_X2_ofList, offset arrlen_mousecoord
+	call printSignedInteger, eax
+
+	;Y1 is the second element of the list
+	call get_Y1_ofList, offset arrlen_mousecoord
+	call printSignedInteger, eax
+
+	;Y2 is the last element of the list
+	call get_Y2_ofList, offset arrlen_mousecoord
+	call printSignedInteger, eax
+
+
+
+	;call 	mouse_install, offset save_mousecoord
+	;call 	printIntList, offset arrlen_mousecoord
 	
 
 
@@ -762,6 +944,8 @@ ENDP main
 DATASEG
 
 	palette dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur-doelwit-kogel
+	arrlen_mousecoord dd 0
+	;arr_mousecoord dd 0
 
 ; -------------------------------------------------------------------
 ; STACK
