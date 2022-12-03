@@ -386,57 +386,11 @@ ENDP bulletPath
 ; DS = DATASEG
 ; ES = DATASEG
 ; ----------------------------------------------------------------------------
-PROC mouseHandler
-    USES    eax, ebx, ecx, edx
-	LOCAL @@oldXpos: dword, @@oldYpos: dword, @@newXpos: dword, @@newYpos: dword
-
-	@@mousepressed:
-	and bl, 1			; check if right button of mouse is clicked
-	jz @@skipit			; only execute if a mousebutton is pressed
-
-	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
-    movzx eax, dx		; get mouse height
-	mov ebx, 149
-	sub ebx, eax
-	mov eax, ebx
-
-	mov ebx,0
-	sar cx, 1			; horizontal cursor position is doubled in input 
-	movzx ebx, cx
 
 
-
-	mov [@@newXpos], ebx
-	mov [@@newYpos], eax
-	;call printSignedInteger, ebx
-	;call printSignedInteger, eax
-
-	pop ebx
-	pop eax
-
-	;call printSignedInteger, ebx
-	;call printSignedInteger, eax
-
-	mov [@@oldXpos], ebx
-	mov [@@oldYpos], eax
-	
-	
-	call moveline, ebx, eax, [@@newXpos], [@@newYpos]
-
-	;store old mouse coordinates
-	push eax
-	push ebx
-
-
-	
-
-	@@skipit:
-
-    ret
-ENDP mouseHandler
-
-PROC save_mousecoord
+PROC click
 	USES eax, ebx
+	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword
 
 	@@mousepressed:
 	and bl, 1			; check if right button of mouse is clicked
@@ -452,30 +406,39 @@ PROC save_mousecoord
 	sar cx, 1			; horizontal cursor position is doubled in input 
 	movzx ebx, cx
 
-	;call printSignedInteger, eax
-	;call printSignedInteger, ebx
-	call appendList,offset arrlen_mousecoord, eax
-	call appendList, offset arrlen_mousecoord, ebx
-	;call printIntList, offset arrlen_mousecoord
+	call drawPixel, ebx, eax, 3
+
+	call	appendList, offset arrlen_mousecoord, ebx
+	call	appendList, offset arrlen_mousecoord, eax
+	;call	printIntList, offset arrlen_mousecoord
+
+	; if aarrlen_mousecoord >=4:
+	mov ecx, [offset arrlen_mousecoord]
+	cmp ecx, 4
+	jl @@skipit
+
+	call get_X1_ofList, offset arrlen_mousecoord
+	mov [@@x1], eax
+	;call printSignedInteger, [@@x1]
+	
+	call get_Y1_ofList, offset arrlen_mousecoord
+	mov [@@y1], eax
+	;call printSignedInteger, [@@y1]
+
+	call get_X2_ofList, offset arrlen_mousecoord
+	mov [@@x2], eax
+	;call printSignedInteger, [@@x2]
+
+	call get_Y2_ofList, offset arrlen_mousecoord
+	mov [@@y2], eax
+	;call printSignedInteger, [@@y2]
+	;call 	printSignedInteger, [arrlen_mousecoord]
+
+	call drawline, [@@x1], [@@y1], [@@x2], [@@y2], 99
 
 	@@skipit:
-	
-	
 	ret
-
-
-ENDP save_mousecoord
-
-PROC Hello
-	;RETURNS eax, ebx
-	
-	mov ebx, 1
-	mov eax, 10
-	add eax, ebx
-
-	ret
-ENDP Hello
-
+ENDP click
 
 PROC printSignedInteger
 	ARG	@@printval:dword
@@ -526,6 +489,19 @@ PROC drawline
 	LOCAL @@dx:dword, @@dy:dword, @@P:dword, @@count:dword, @@xoperator: dword, @@yoperator: dword
 	USES eax, ebx,ecx, edx
 
+	;Check if y2<=298, else x2 = 298
+	@@Check_x2:
+	cmp [@@x2], 298
+	jle @@Check_y2
+	mov [@@x2], 298
+
+	@@Check_y2:
+	;Check if y2>=0, else y2 = 0
+	cmp [@@y2], 0
+	jge @@continue
+	mov [@@y2], 0
+
+	@@continue:
 	;dx = x2 - x1
 	mov eax, [@@x2]
 	sub eax, [@@x1]
@@ -616,6 +592,8 @@ PROC drawline
 
 		;count = dx
 		mov eax, [@@dx]
+		;mov ebx, 2
+		;div ebx
 		mov [@@count], eax
 
 		;initialize
@@ -676,6 +654,8 @@ PROC drawline
 
 		;count = dy
 		mov eax, [@@dy]
+		;mov ebx, 2
+		;div ebx
 		mov [@@count], eax
 
 		;initialize
@@ -790,7 +770,7 @@ PROC printIntList
 
 	
 	mov	ah, 2h 		; Function for printing single characters.
-@@printInt:
+	@@printInt:
 	add ebx, 4	; go to next integer
 	call printSignedInteger, [dword ptr ebx]
 	loop @@printInt	; loop over all integers
@@ -896,36 +876,43 @@ PROC main
 	;call 	printIntList, offset arrlen_mousecoord
 
 	;Create a list starting from the adress after the adress of arrlen_mousecoord
-	call	appendList, offset arrlen_mousecoord, 20
-	call	appendList, offset arrlen_mousecoord, 39
-	call	appendList, offset arrlen_mousecoord, 44
-	call	appendList, offset arrlen_mousecoord, 7
-	call	appendList, offset arrlen_mousecoord, 56
-	call	appendList, offset arrlen_mousecoord, 92
-	call	appendList, offset arrlen_mousecoord, 43
-	call	appendList, offset arrlen_mousecoord, 78
-	call	appendList, offset arrlen_mousecoord, 67
-	call 	printIntList, offset arrlen_mousecoord
+	;call	appendList, offset arrlen_mousecoord, 20
+	;call	appendList, offset arrlen_mousecoord, 39
+	;call	appendList, offset arrlen_mousecoord, 44
+	;call	appendList, offset arrlen_mousecoord, 7
+	;call	appendList, offset arrlen_mousecoord, 56
+	;call	appendList, offset arrlen_mousecoord, 92
+	;call	appendList, offset arrlen_mousecoord, 43
+	;call	appendList, offset arrlen_mousecoord, 78
+	;call	appendList, offset arrlen_mousecoord, 67
+	;call 	printIntList, offset arrlen_mousecoord
 
 	;X1 is the first element of the list
-	call get_X1_ofList, offset arrlen_mousecoord
-	call printSignedInteger, eax
+	;call get_X1_ofList, offset arrlen_mousecoord
+	;call printSignedInteger, eax
 
 	;X2 is the second last element of the list
-	call get_X2_ofList, offset arrlen_mousecoord
-	call printSignedInteger, eax
+	;call get_X2_ofList, offset arrlen_mousecoord
+	;call printSignedInteger, eax
 
 	;Y1 is the second element of the list
-	call get_Y1_ofList, offset arrlen_mousecoord
-	call printSignedInteger, eax
+	;call get_Y1_ofList, offset arrlen_mousecoord
+	;call printSignedInteger, eax
 
 	;Y2 is the last element of the list
-	call get_Y2_ofList, offset arrlen_mousecoord
-	call printSignedInteger, eax
+	;call get_Y2_ofList, offset arrlen_mousecoord
+	;call printSignedInteger, eax
+
+	;call printSignedInteger,[arrlen_mousecoord] 	;I changed the value of arrlen_mousecoord 
+
+
+	call 	mouse_install, offset click
 
 
 
-	;call 	mouse_install, offset save_mousecoord
+
+	
+
 	;call 	printIntList, offset arrlen_mousecoord
 	
 
@@ -945,7 +932,6 @@ DATASEG
 
 	palette dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur-doelwit-kogel
 	arrlen_mousecoord dd 0
-	;arr_mousecoord dd 0
 
 ; -------------------------------------------------------------------
 ; STACK
