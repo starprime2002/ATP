@@ -219,7 +219,7 @@ PROC fillBackground
         cmp edx, 100
         jne @@heigthWall
     ; Draw target 
-    mov edx, 1 
+    mov edx, 0 
     @@heigthTarget: 
         xor ebx, ebx
         mov ebx, 100
@@ -276,6 +276,24 @@ PROC drawPixel                              ; input zijn in fractionele bits
     ret
 ENDP drawPixel
 
+;Mandatory for physics simulation
+PROC updateValue
+    ARG @@value:dword, @@velocity:dword, @@deltat:dword RETURNS eax
+    USES ebx, edx
+
+    mov eax, [@@velocity]
+    mov ebx, [@@deltat]
+    mov edx, 0
+    cmp eax, 0
+    jge @@positive
+    mov edx, ALLONES
+    @@positive:
+    idiv ebx
+    add eax, [@@value]
+
+    ret
+ENDP updateValue
+
 ; deletes previous bullet and draws a new one
 PROC moveBullet                             ; input zijn in fractionele bits
     ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos:dword
@@ -318,7 +336,7 @@ PROC moveBullet                             ; input zijn in fractionele bits
     sub ecx, FRAQBIT
     call drawPixel, ebx, ecx, 4
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 128
+    call drawPixel, ebx, ecx, 38
     add ebx, FRAQBIT
     call drawPixel, ebx, ecx, 4
     sub ebx, 2*FRAQBIT
@@ -388,6 +406,7 @@ ENDP checkCollision
 PROC replaceBullet
     ARG @@collisionType:byte, @@oldXpos:dword, @@oldYpos:dword
     LOCAL @@waittime:dword
+    USES ecx
 
     mov [@@waittime], 50
 
@@ -411,6 +430,8 @@ PROC replaceBullet
         call moveBullet, [@@oldXpos], 2*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
         jmp @@endReplacement
     @@wallCase:
+        jmp @@succesCheck
+        @@noSucces:
         call moveBullet, [@@oldXpos], [@@oldYpos], 297*FRAQBIT, [@@oldYpos]
         call printString, offset msgWall
         call wait_VBLANK, [@@waittime]
@@ -439,6 +460,18 @@ PROC replaceBullet
         call printString, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
         call moveBullet, 319*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        jmp @@endReplacement
+
+    @@succesCheck:
+        mov ecx, [@@oldYpos]
+        cmp ecx, 42*FRAQBIT
+        jl @@noSucces
+        cmp ecx, 51*FRAQBIT
+        jg @@noSucces
+        call moveBullet, [@@oldXpos], [@@oldYpos], 295*FRAQBIT, [@@oldYpos]
+        call printString, offset msgSucces
+        call wait_VBLANK, [@@waittime]
+        call moveBullet, 295*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
         jmp @@endReplacement
 
     @@endReplacement:
@@ -474,49 +507,18 @@ PROC bulletPath
     @@tijdsloop: 
 
         ;xpos += vx*dt
-        mov eax, [@@vx]
-        mov ebx, [@@dt]
-        mov edx, 0
-        cmp eax, 0
-        jge @@positivevx
-        mov edx, ALLONES
-        @@positivevx:
-        idiv ebx
-        add [@@xpos], eax
+        call updateValue, [@@xpos], [@@vx], [@@dt]
+        mov [@@xpos], eax
         ;ypos += vy*dt
-        mov eax, [@@vy]
-        mov ebx, [@@dt]
-        mov edx, 0
-        cmp eax, 0
-        jge @@positivevy
-        mov edx, ALLONES
-        @@positivevy:
-        idiv ebx
-        add [@@ypos], eax
-
+        call updateValue, [@@ypos], [@@vy], [@@dt]
+        mov [@@ypos], eax
         ;vx += ax*dt
-        mov eax, [@@ax]             ; required for wind later
-        mov ebx, [@@dt]
-        mov edx, 0
-        cmp eax, 0
-        jge @@positiveax
-        mov edx, ALLONES
-        @@positiveax:
-        mov edx, 0 
-        idiv ebx
-        add [@@vx], eax
+        call updateValue, [@@vx], [@@ax], [@@dt]             ; required for wind later
+        mov [@@vx], eax
         ;vy += ay*dt 
-        mov eax, [@@ay]
-        mov ebx, [@@dt]
-        mov edx, 0
-        cmp eax, 0
-        jge @@positiveay
-        mov edx, ALLONES
-        @@positiveay:
-        mov edx, ALLONES
-        idiv ebx
-        add [@@vy], eax
- 
+        call updateValue, [@@vy], [@@ay], [@@dt]
+        mov [@@vy], eax
+
 
         call checkCollision, [@@xpos], [@@ypos]
         cmp ecx, 0
@@ -561,7 +563,7 @@ PROC main
     call    updateColorpallete
     call    fillBackground
 
-    call    bulletPath, 34, 49
+    call    bulletPath, 60, 24
 
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
     call    terminateProcess
@@ -574,6 +576,7 @@ ENDP main
 DATASEG
 	msgGround	    db "On the ground!", 13, 10, '$'
 	msgWall	        db "Miss!", 13, 10, '$'
+	msgSucces	    db "Succes!", 13, 10, '$'
 	msgTooHigh	    db "Too high!", 13, 10, '$'
     msgOutOfBound   db "Out of bound!", 13, 10, '$'
     palette dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36              ; lucht-gras-muur-doelwit-kogel
