@@ -390,7 +390,7 @@ ENDP bulletPath
 
 PROC click
 	USES eax, ebx
-	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword
+	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
 
 	@@mousepressed:
 	and bl, 1			; check if right button of mouse is clicked
@@ -406,7 +406,7 @@ PROC click
 	sar cx, 1			; horizontal cursor position is doubled in input 
 	movzx ebx, cx
 
-	call drawPixel, ebx, eax, 3
+	;call drawPixel, ebx, eax, 3
 
 	call	appendList, offset arrlen_mousecoord, ebx
 	call	appendList, offset arrlen_mousecoord, eax
@@ -432,9 +432,48 @@ PROC click
 	call get_Y2_ofList, offset arrlen_mousecoord
 	mov [@@y2], eax
 	;call printSignedInteger, [@@y2]
-	;call 	printSignedInteger, [arrlen_mousecoord]
 
-	call drawline, [@@x1], [@@y1], [@@x2], [@@y2], 99
+	call get_oldX_ofList, offset arrlen_mousecoord
+	mov [@@oldXpos], eax
+	;call printSignedInteger, [@@oldXpos]
+
+	call get_oldY_ofList, offset arrlen_mousecoord
+	mov [@@oldYpos], eax
+	;call printSignedInteger, [@@oldYpos]
+
+	
+	;call 	printSignedInteger, [arrlen_mousecoord]
+	;call	printIntList, offset arrlen_mousecoord
+	call drawCursor, [@@oldXpos], [@@oldYpos], 0
+	call drawCursor, [@@x2], [@@y2], 3
+
+	call trajectory_x, [@@x1], [@@oldXpos]
+	;call printSignedInteger, eax
+	mov [@@a], eax
+
+	call trajectory_y, [@@y1], [@@oldYpos]
+	;call printSignedInteger, eax
+	mov [@@b], eax
+
+	call drawline, 25, 25, [@@a], [@@b], 0
+
+	call trajectory_x, [@@x1], [@@x2]
+	;call printSignedInteger, eax
+	mov [@@a], eax
+
+	call trajectory_y, [@@y1], [@@y2]
+	;call printSignedInteger, eax
+	mov [@@b], eax
+
+	call drawline, 25, 25, [@@a], [@@b], 99
+
+
+
+	
+
+	;call drawline, [@@x1], [@@y1], [@@oldXpos], [@@oldYpos], 0
+	;call drawline, [@@x1], [@@y1], [@@x2], [@@y2], 99
+
 
 	@@skipit:
 	ret
@@ -592,14 +631,14 @@ PROC drawline
 
 		;count = dx
 		mov eax, [@@dx]
-		;mov ebx, 2
-		;div ebx
 		mov [@@count], eax
 
 		;initialize
 		mov eax, [@@x1]
 		mov ebx, [@@y1]
 		mov ecx, [@@count]
+		jcxz @@slope_greater_1 
+		
 
 		;---------------------------------------------------
 		;bresenham's line algorithm:
@@ -654,14 +693,14 @@ PROC drawline
 
 		;count = dy
 		mov eax, [@@dy]
-		;mov ebx, 2
-		;div ebx
 		mov [@@count], eax
 
 		;initialize
 		mov eax, [@@x1]
 		mov ebx, [@@y1]
 		mov ecx, [@@count]	
+		;cmp ecx, 0
+		jcxz @@end
 
 		;---------------------------------------------------
 		;bresenham's line algorithm:
@@ -853,6 +892,88 @@ PROC get_Y2_ofList
 	ret
 ENDP get_Y2_ofList
 
+PROC get_oldX_ofList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 12
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_oldX_ofList
+
+PROC get_oldY_ofList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 8
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_oldY_ofList
+
+PROC drawCursor
+	ARG @@x:dword ,@@y:dword, @@color: dword
+	USES eax
+
+	mov eax, [@@color]
+	call drawPixel, [@@x], [@@y], eax
+
+	sub [@@x], 1
+	call drawPixel, [@@x], [@@y], eax
+
+	add [@@x], 2
+	call drawPixel, [@@x], [@@y], eax
+
+	sub [@@x], 1
+	sub [@@y], 1
+	call drawPixel, [@@x], [@@y], eax
+
+	add [@@y], 2
+	call drawPixel, [@@x], [@@y], eax
+
+
+	ret
+
+ENDP drawCursor
+
+PROC trajectory_x
+	ARG @@x1:dword, @@x2:dword RETURNS eax
+	LOCAL @@dx: dword
+	
+	;dx = x2 - x1
+	mov eax, [@@x2]
+	sub eax, [@@x1]
+	mov [@@dx], eax
+
+	mov eax, 25
+	sub eax, [@@dx]
+
+	ret
+ENDP trajectory_x
+
+PROC trajectory_y
+	ARG @@y1:dword, @@y2:dword RETURNS eax
+	LOCAL @@dy: dword
+
+	;dy = y2 - y1
+	mov eax, [@@y2]
+	sub eax, [@@y1]
+	mov [@@dy], eax
+
+	mov eax, 25
+	sub eax, [@@dy]
+
+	ret
+ENDP trajectory_y
 
 
 PROC main
@@ -907,6 +1028,7 @@ PROC main
 
 
 	call 	mouse_install, offset click
+	;call drawline, 25, 25, 25, 25
 
 
 
