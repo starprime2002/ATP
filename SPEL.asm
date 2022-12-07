@@ -13,12 +13,14 @@ P386
 MODEL FLAT, C 
 ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT 
 
-; Screen constants 
+INCLUDE "rand.inc"
+
+; Constants 
 VMEMADR EQU 0A0000h     ; video memory address 
 SCRWIDTH EQU 320        ; screen witdth 
 SCRHEIGHT EQU 200       ; screen height 
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
-FRAQBIT EQU 128         ; fractionele bit  
+FRAQBIT EQU 127         ; fractionele bit  
 
 
 CODESEG 
@@ -296,18 +298,16 @@ ENDP updateValue
 
 ; deletes previous bullet and draws a new one
 PROC moveBullet                             ; input zijn in fractionele bits
-    ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos:dword
+    ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos:dword, @@colorBullet:dword
     USES ebx, ecx
 
     ;Delete previous bullet
     mov ebx, [@@oldXpos]
     mov ecx, [@@oldYpos]
 
-    call drawPixel, ebx, ecx, 0
     add ebx, FRAQBIT
     call drawPixel, ebx, ecx, 0
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
     sub ebx, 2*FRAQBIT
     sub ecx, FRAQBIT
     call drawPixel, ebx, ecx, 0
@@ -317,42 +317,36 @@ PROC moveBullet                             ; input zijn in fractionele bits
     call drawPixel, ebx, ecx, 0
     sub ebx, 2*FRAQBIT
     sub ecx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
     add ebx, FRAQBIT
     call drawPixel, ebx, ecx, 0
-    add ebx, FRAQBIT
     call drawPixel, ebx, ecx, 0
 
     ;Draw new bullet
     mov ebx, [@@newXpos]
     mov ecx, [@@newYpos]
 
-    call drawPixel, ebx, ecx, 4 
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
+    call drawPixel, ebx, ecx, 24
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
     sub ebx, 2*FRAQBIT
     sub ecx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
+    call drawPixel, ebx, ecx, 24
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 38
+    call drawPixel, ebx, ecx, [@@colorBullet]
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
+    call drawPixel, ebx, ecx, 24
     sub ebx, 2*FRAQBIT
     sub ecx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
+    call drawPixel, ebx, ecx, 24
     add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 4
 
     ret
 ENDP moveBullet
 
 ; Checks    if the bullet collided with wall or ground
 ;           if the bullet is out of border
-PROC checkCollision
+PROC checkCollision                                     ;te optimisere
     ARG @@xpos:dword, @@ypos:dword RETURNS ecx
     USES eax, ebx
 
@@ -366,7 +360,7 @@ PROC checkCollision
         mov ecx, 1
         jmp @@collisionEnd
     @@wallCheck:                        ; Wall = (300,0)-(309,99)
-        cmp eax, 297*FRAQBIT
+        cmp eax, 295*FRAQBIT
         jl @@upperCheck
         cmp eax, 319*FRAQBIT
         jg @@upperCheck
@@ -404,7 +398,7 @@ ENDP checkCollision
 
 ; To replace bulllet once collided
 PROC replaceBullet
-    ARG @@collisionType:byte, @@oldXpos:dword, @@oldYpos:dword
+    ARG @@collisionType:byte, @@oldXpos:dword, @@oldYpos:dword, @@colorBullet:dword
     LOCAL @@waittime:dword
     USES ecx
 
@@ -424,42 +418,42 @@ PROC replaceBullet
     je @@rightLimitCase
 
     @@groundCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 2*FRAQBIT
+        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 2*FRAQBIT, [@@colorBullet] 
         call printString, offset msgGround
         call wait_VBLANK, [@@waittime]
-        call moveBullet, [@@oldXpos], 2*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, [@@oldXpos], 2*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
     @@wallCase:
         jmp @@succesCheck
         @@noSucces:
-        call moveBullet, [@@oldXpos], [@@oldYpos], 297*FRAQBIT, [@@oldYpos]
+        call moveBullet, [@@oldXpos], [@@oldYpos], 297*FRAQBIT, [@@oldYpos], [@@colorBullet]
         call printString, offset msgWall
         call wait_VBLANK, [@@waittime]
-        call moveBullet, 297*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, 297*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
     @@wall2Case:
-        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 101*FRAQBIT
+        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 101*FRAQBIT, [@@colorBullet]
         call printString, offset msgWall
         call wait_VBLANK, [@@waittime]
-        call moveBullet, [@@oldXpos], 101*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, [@@oldXpos], 101*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
     @@upperLimitCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 149*FRAQBIT
+        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 149*FRAQBIT, [@@colorBullet]
         call printString, offset msgTooHigh
         call wait_VBLANK, [@@waittime]
-        call moveBullet, [@@oldXpos], 149*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, [@@oldXpos], 149*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
     @@leftLimitCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], 0, [@@oldYpos]
+        call moveBullet, [@@oldXpos], [@@oldYpos], 0, [@@oldYpos], [@@colorBullet]
         call printString, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
-        call moveBullet, 0, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, 0, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
     @@rightLimitCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], 317*FRAQBIT, [@@oldYpos]
+        call moveBullet, [@@oldXpos], [@@oldYpos], 317*FRAQBIT, [@@oldYpos], [@@colorBullet]
         call printString, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
-        call moveBullet, 319*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, 317*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
 
     @@succesCheck:
@@ -468,10 +462,10 @@ PROC replaceBullet
         jl @@noSucces
         cmp ecx, 51*FRAQBIT
         jg @@noSucces
-        call moveBullet, [@@oldXpos], [@@oldYpos], 295*FRAQBIT, [@@oldYpos]
+        call moveBullet, [@@oldXpos], [@@oldYpos], 295*FRAQBIT, [@@oldYpos], [@@colorBullet]
         call printString, offset msgSucces
         call wait_VBLANK, [@@waittime]
-        call moveBullet, 295*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT
+        call moveBullet, 295*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
         jmp @@endReplacement
 
     @@endReplacement:
@@ -481,7 +475,7 @@ ENDP replaceBullet
 ;Initialize a throw
 PROC bulletPath
     ARG @@vxbegin:dword, @@vybegin:dword
-    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword, @@colorBullet:dword
     USES eax, ebx, ecx, edx
 
     mov [@@dt], 16                  ; [1/time unit] we work with the inverse to dodge decimal points
@@ -498,10 +492,16 @@ PROC bulletPath
     mov eax, [@@vybegin]            ;[distance/time]
     imul ebx
     mov [@@vy], eax
-    mov [@@ax], 0                   ;[distance/time²]
-    mov [@@ay], -10*FRAQBIT         ;[distance/time²] downward accelaration due to "gravity" -9.81 = -10 here
+    mov [@@ax], 0                   ;[distance/timeÂ²]
+    mov [@@ay], -10*FRAQBIT         ;[distance/timeÂ²] downward accelaration due to "gravity" -9.81 = -10 here
 
-    call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos]
+    ;Color bullet
+    call rand_init
+    call rand
+    mov [@@colorBullet], eax
+    call printSignedInteger, eax
+
+    call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos], [@@colorBullet]
 
     xor ecx, ecx
     @@tijdsloop: 
@@ -529,7 +529,7 @@ PROC bulletPath
         pop ebx
         pop eax
         ; displace bullet
-        call moveBullet, eax, ebx, [@@xpos], [@@ypos]
+        call moveBullet, eax, ebx, [@@xpos], [@@ypos], [@@colorBullet]
         ;Store new coordinations for next loop
         mov eax, [@@xpos]
         mov ebx, [@@ypos]
@@ -543,10 +543,12 @@ PROC bulletPath
 
 
         @@endPath:
+    	;call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
+
         ;Bring back old coordinations
         pop ebx
         pop eax
-        call replaceBullet, ecx, eax, ebx
+        call replaceBullet, ecx, eax, ebx, [@@colorBullet]
     ret 
 ENDP bulletPath 
 
@@ -563,7 +565,8 @@ PROC main
     call    updateColorpallete
     call    fillBackground
 
-    call    bulletPath, 60, 24
+
+    call    bulletPath, 45, 32
 
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
     call    terminateProcess
