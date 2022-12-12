@@ -51,6 +51,7 @@ PROC waitForSpecificKeystroke
 	ret
 ENDP waitForSpecificKeystroke
 
+
 ; Terminate the program.
 PROC terminateProcess
 	USES eax
@@ -307,7 +308,7 @@ PROC bulletPath
 
 
 	call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos] 
-	call	waitForSpecificKeystroke, 001Bh
+	;call	waitForSpecificKeystroke, 001Bh
 
 	@@tijdsloop:
 		mov eax, [@@dt]
@@ -389,12 +390,117 @@ ENDP bulletPath
 
 
 PROC click
-	USES eax, ebx
-	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
-
+	USES eax, ebx, ecx, edx
+	mov ax, 1
+	int 33h 
+	
 	@@mousepressed:
 	and bl, 1			; check if right button of mouse is clicked
 	jz @@skipit			; only execute if a mousebutton is pressed
+
+	call drawtrajectory
+
+	@@skipit:
+	
+	;call printSignedInteger, [@@a]
+	;call printSignedInteger, [@@b]
+	;call bulletPath, [@@a], [@@b]
+	;call showcursor
+	;call mouse_uninstall
+	
+	ret
+ENDP click
+
+PROC mousehandler
+	USES eax, ecx, edx
+
+	;Display the mouse
+	mov ax, 1
+	int 33h 
+
+	movzx ebx, bl
+	call printSignedInteger, ebx
+	call mouse_let_go,  ebx
+	; if arrlen_mousecoord >=3:
+	mov ecx, [offset arrlen_mousecoord]
+	cmp ecx, 3
+	jl @@return
+
+	call moveElementofList3, offset arrlen_mousecoord
+
+	@@return:
+	ret
+ENDP mousehandler
+
+PROC mouse_let_go
+	ARG @@new_value: dword
+	USES eax, ebx, ecx, edx
+	call	appendList,offset arrlen_mousecoord, [@@new_value]
+	call printIntList, offset arrlen_mousecoord
+
+	ret
+
+
+
+
+ENDP mouse_let_go
+
+
+PROC showcursor
+	USES eax, ebx
+	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
+
+	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
+    movzx eax, dx		; get mouse height
+	mov ebx, 149
+	sub ebx, eax
+	mov eax, ebx
+
+	mov ebx,0
+	sar cx, 1			; horizontal cursor position is doubled in input 
+	movzx ebx, cx
+
+	;call printSignedInteger, ebx
+	;call printSignedInteger, eax
+	call	appendList, offset arrlen_mousecoord, ebx	;xcoord
+	call	appendList, offset arrlen_mousecoord, eax	;ycoord
+
+	; if arrlen_mousecoord >=4:
+	mov ecx, [offset arrlen_mousecoord]
+	cmp ecx, 6
+	jl @@return
+
+	call moveElementofList2, offset arrlen_mousecoord
+
+	call get_X1_ofList, offset arrlen_mousecoord
+	mov [@@x1], eax
+	;call printSignedInteger, [@@x1]
+	
+	call get_Y1_ofList, offset arrlen_mousecoord
+	mov [@@y1], eax
+	;call printSignedInteger, [@@y1]
+
+	call get_X2_ofList, offset arrlen_mousecoord
+	mov [@@x2], eax
+	;call printSignedInteger, [@@x2]
+
+	call get_Y2_ofList, offset arrlen_mousecoord
+	mov [@@y2], eax
+
+	call printIntList, offset arrlen_mousecoord
+	call drawCursor, [@@x1], [@@y1], 0
+	call drawCursor, [@@x2], [@@y2], 99
+
+
+	@@return:
+
+	ret
+ENDP showcursor
+
+
+PROC drawtrajectory
+	USES eax, ebx, ecx, edx
+	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
 
 	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
     movzx eax, dx		; get mouse height
@@ -408,14 +514,18 @@ PROC click
 
 	;call drawPixel, ebx, eax, 3
 
-	call	appendList, offset arrlen_mousecoord, ebx
-	call	appendList, offset arrlen_mousecoord, eax
+	call	appendList, offset arrlen_mousecoord, ebx	;xcoord
+	call	appendList, offset arrlen_mousecoord, eax	;ycoord
+	;call printSignedInteger, ebx
+	;call printSignedInteger, eax
 	;call	printIntList, offset arrlen_mousecoord
 
-	; if aarrlen_mousecoord >=4:
+	; if arrlen_mousecoord >=8:
 	mov ecx, [offset arrlen_mousecoord]
-	cmp ecx, 4
+	cmp ecx, 8
 	jl @@skipit
+
+	call moveElementofList, offset arrlen_mousecoord
 
 	call get_X1_ofList, offset arrlen_mousecoord
 	mov [@@x1], eax
@@ -444,40 +554,42 @@ PROC click
 	
 	;call 	printSignedInteger, [arrlen_mousecoord]
 	;call	printIntList, offset arrlen_mousecoord
-	call drawCursor, [@@oldXpos], [@@oldYpos], 0
-	call drawCursor, [@@x2], [@@y2], 3
+	
+	;call drawCursor, [@@oldXpos], [@@oldYpos], 0
+	call drawPixel, [@@x1], [@@y1], 99
+	;call drawCursor, [@@x2], [@@y2], 3
 
+
+	;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
 	call trajectory_x, [@@x1], [@@oldXpos]
-	;call printSignedInteger, eax
 	mov [@@a], eax
 
 	call trajectory_y, [@@y1], [@@oldYpos]
-	;call printSignedInteger, eax
 	mov [@@b], eax
 
 	call drawline, 25, 25, [@@a], [@@b], 0
 
+
 	call trajectory_x, [@@x1], [@@x2]
-	;call printSignedInteger, eax
 	mov [@@a], eax
 
+
 	call trajectory_y, [@@y1], [@@y2]
-	;call printSignedInteger, eax
 	mov [@@b], eax
+
 
 	call drawline, 25, 25, [@@a], [@@b], 99
 
+	;call waitForSpecificKeystroke,001Bh 
 
-
-	
+	;call bulletPath, [@@a], [@@b]
 
 	;call drawline, [@@x1], [@@y1], [@@oldXpos], [@@oldYpos], 0
 	;call drawline, [@@x1], [@@y1], [@@x2], [@@y2], 99
-
-
 	@@skipit:
+
 	ret
-ENDP click
+ENDP drawtrajectory
 
 PROC printSignedInteger
 	ARG	@@printval:dword
@@ -528,7 +640,7 @@ PROC drawline
 	LOCAL @@dx:dword, @@dy:dword, @@P:dword, @@count:dword, @@xoperator: dword, @@yoperator: dword
 	USES eax, ebx,ecx, edx
 
-	;Check if y2<=298, else x2 = 298
+	;Check if x2<=298, else x2 = 298
 	@@Check_x2:
 	cmp [@@x2], 298
 	jle @@Check_y2
@@ -705,7 +817,7 @@ PROC drawline
 		;---------------------------------------------------
 		;bresenham's line algorithm:
 		;This algorithm is used to draw a line between two points (x1, y1) and (x2, y2). 
-		;If the slope >1, yoperator (which can be +1 (increment) or -1 (decrement), dependent of dx) is added to y1.
+		;If the slope >1, yoperator (which can be +1 (increment) or -1 (decrement), dependent of dy) is added to y1.
 		;if P<0: x1 = x1 and P = P + 2*dx 
 		;if P>0: x1 = x1 + 1 and P = P + 2*dx - 2*dy
 		; The loop goes on until y1 has reached y2 or until dy is zero.
@@ -821,11 +933,11 @@ PROC printIntList
 	
 	@@end:
 	ret
-ENDP
+ENDP printIntList
 
 PROC appendList
 	ARG @@arrayptr:dword, @@new_value: dword
-	USES eax, ebx, ecx, edx
+	USES eax, ebx, ecx
 
 	mov ebx, [@@arrayptr]	; store pointer in ebx
 	mov ecx, [ebx]			; get length counter in ecx
@@ -841,6 +953,86 @@ PROC appendList
 	ret
 
 ENDP appendList
+
+PROC moveElementofList
+	ARG @@arrayptr:dword
+	USES eax, ebx, ecx
+	
+	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
+	;First check if it's an array of 8 elements
+	;cmp [dword ptr ebx], 8
+	;jne @@skip
+
+	sub  [dword ptr ebx], 2	; sub 2 to the actual value of arrlen_mouse so the length becomes 6 for the print procedure later
+
+	add ebx, 8		;go to the second element
+	mov ecx, 4		; counter for the loop
+
+	@@arrayloop:
+		add ebx, 12					;go 3 elements further
+		mov eax, [ebx]				;store this element in eax
+		sub ebx, 8					;go 2 elements back
+		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
+		loop @@arrayloop
+	
+	
+	@@skip:
+	ret
+
+ENDP moveElementofList
+
+PROC moveElementofList2
+	ARG @@arrayptr:dword
+	USES eax, ebx, ecx
+	
+	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
+	;First check if it's an array of 8 elements
+	;cmp [dword ptr ebx], 8
+	;jne @@skip
+
+	sub  [dword ptr ebx], 2	; sub 2 to the actual value of arrlen_mouse so the length becomes 6 for the print procedure later
+
+	mov ecx, 4		; counter for the loop
+
+	@@arrayloop:
+		add ebx, 12					;go 3 elements further
+		mov eax, [ebx]				;store this element in eax
+		sub ebx, 8					;go 2 elements back
+		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
+		loop @@arrayloop
+	
+	
+	@@skip:
+	ret
+
+ENDP moveElementofList2
+
+PROC moveElementofList3
+	ARG @@arrayptr:dword
+	USES eax, ebx, ecx
+	
+	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
+	;First check if it's an array of 8 elements
+	;cmp [dword ptr ebx], 8
+	;jne @@skip
+
+	sub  [dword ptr ebx], 1	; sub 2 to the actual value of arrlen_mouse so the length becomes 6 for the print procedure later
+
+	mov ecx, 2		; counter for the loop
+
+	@@arrayloop:
+		add ebx, 8					;go 2 elements further
+		mov eax, [ebx]				;store this element in eax
+		sub ebx, 4					;go 1 elements back
+		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
+		loop @@arrayloop
+	
+	
+	@@skip:
+	ret
+
+ENDP moveElementofList3
+
 
 PROC get_X1_ofList
 	ARG @@arrayptr:dword RETURNS eax
@@ -924,6 +1116,25 @@ PROC drawCursor
 	ARG @@x:dword ,@@y:dword, @@color: dword
 	USES eax
 
+	;Check if x>=1, else put it on 1
+	@@Check_x_1:
+	cmp [@@x], 1
+	jge @@Check_x_width
+	mov [@@x], 1
+
+	;Check if x<=296, else put it on 296
+	@@Check_x_width:
+	cmp [@@x], 296
+	jle @@Check_y_0
+	mov [@@x], 296
+
+	;Check if y>=1, else put it on 1
+	@@Check_y_0:
+	cmp [@@y], 1
+	jge @@continue
+	mov [@@y], 1
+
+	@@continue:
 	mov eax, [@@color]
 	call drawPixel, [@@x], [@@y], eax
 
@@ -957,6 +1168,12 @@ PROC trajectory_x
 	mov eax, 25
 	sub eax, [@@dx]
 
+	;Chech if eax is greater than 0, else put it on 0
+	cmp eax, 0
+	jge @@skip
+	mov eax, 0
+
+	@@skip:
 	ret
 ENDP trajectory_x
 
@@ -974,6 +1191,40 @@ PROC trajectory_y
 
 	ret
 ENDP trajectory_y
+PROC haha
+	USES eax
+	call waitForSpecificKeystroke, 001Bh
+	call printSignedInteger, 123
+	ret
+ENDP haha
+
+PROC undraw_last_trajectoryline
+	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@a: dword, @@b: dword
+
+	call get_X1_ofList, offset arrlen_mousecoord
+	mov [@@x1], eax
+
+	call get_Y1_ofList, offset arrlen_mousecoord
+	mov [@@y1], eax
+
+	call get_X2_ofList, offset arrlen_mousecoord
+	mov [@@x2], eax
+
+	call get_Y2_ofList, offset arrlen_mousecoord
+	mov [@@y2], eax
+
+	call trajectory_x, [@@x1], [@@x2]
+	mov [@@a], eax
+
+	call trajectory_y, [@@y1], [@@y2]
+	mov [@@b], eax
+
+	call drawline, 25, 25, [@@a], [@@b], 0
+
+	call bulletPath, [@@a], [@@b]
+
+	ret
+ENDP undraw_last_trajectoryline
 
 
 PROC main
@@ -983,14 +1234,13 @@ PROC main
 	push ds
 	pop	es
 
-	call    mouse_present
-
 	call	setVideoMode, 13h
 	finit	; initialize FPU
 	
 	call	updateColorpallete
 	call	fillBackground
-	call drawPixel, 0, 300, 99
+	
+	;call drawPixel, 0, 300, 99
 	;call	bulletPath, 45, 45
 	;call	bulletPath, 25, 25
 	
@@ -1005,8 +1255,12 @@ PROC main
 	;call	appendList, offset arrlen_mousecoord, 92
 	;call	appendList, offset arrlen_mousecoord, 43
 	;call	appendList, offset arrlen_mousecoord, 78
-	;call	appendList, offset arrlen_mousecoord, 67
+
+	;call moveElementofList, offset arrlen_mousecoord
 	;call 	printIntList, offset arrlen_mousecoord
+	;call printSignedInteger,[arrlen_mousecoord]
+
+
 
 	;X1 is the first element of the list
 	;call get_X1_ofList, offset arrlen_mousecoord
@@ -1026,12 +1280,23 @@ PROC main
 
 	;call printSignedInteger,[arrlen_mousecoord] 	;I changed the value of arrlen_mousecoord 
 
+	@@start_mousehandling:
+		;draw trajectory
+		call 	mouse_install, offset click
+		
+		call	waitForSpecificKeystroke, 001Bh
+		call undraw_last_trajectoryline
 
-	call 	mouse_install, offset click
+		call mouse_uninstall
+		
+	
+	;call 	mouse_install, offset mousehandler
+
+	;call printSignedInteger, 10
+	;call 	mouse_install, offset showcursor
+	;call bulletPath, 45, 45
+	
 	;call drawline, 25, 25, 25, 25
-
-
-
 
 	
 
@@ -1054,6 +1319,8 @@ DATASEG
 
 	palette dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur-doelwit-kogel
 	arrlen_mousecoord dd 0
+	
+
 
 ; -------------------------------------------------------------------
 ; STACK
