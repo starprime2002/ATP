@@ -372,6 +372,92 @@ PROC bulletPath
 ENDP bulletPath
 
 
+PROC drawbulletPath
+	ARG @@vxbegin:dword, @@vybegin:dword, @@color: dword
+	LOCAL @@tijd:dword, @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
+	USES eax, ebx
+
+	mov [@@tijd], 0
+	mov [@@dt], 1					; [time unit]
+
+	mov eax, 25
+	mov ebx, 25
+
+	push eax
+	push ebx
+
+	mov [@@xpos], eax				;[pixels]
+	mov [@@ypos], ebx				;[pixels]
+	mov eax, [@@vxbegin]			;[pixels/time unit]
+	mov [@@vx], eax
+	mov eax, [@@vybegin]			;[pixels/time unit]
+	mov [@@vy], eax
+	mov [@@ax], 0					;[pixels/time unit²]
+	mov [@@ay], -10					;[pixels/time unit²] downward accelaration due to "gravity"
+
+
+	call drawPixel, [@@xpos], [@@ypos], [@@color]
+	;call	waitForSpecificKeystroke, 001Bh
+
+	@@tijdsloop:
+		mov eax, [@@dt]
+		add [@@tijd], eax
+
+		;vx += ax*dt
+		mov eax, [@@ax]				; ik weet dat ax toch nul is maar in toekomst zal ook windkracht komen
+		mov ebx, [@@dt]				; ik weet ook dat dt toch 1 is (maar zou kunne veranderen) 
+		mul ebx
+		add [@@vx], eax
+		;vy += ay*dt
+		mov eax, [@@ay]
+		mov ebx, [@@dt]
+		mul ebx
+		add [@@vy], eax
+		;xpos += vx*dt 
+		mov eax, [@@vx]
+		mov ebx, [@@dt]
+		mul ebx
+		add [@@xpos], eax
+		;ypos += vy*dt
+		mov eax, [@@vy]
+		mov ebx, [@@dt]
+		imul ebx
+		add [@@ypos], eax
+		
+		;Bring back old coordinations
+		pop ebx						
+		pop eax
+
+		;bring back old coordinations
+		call drawPixel, [@@xpos], [@@ypos], [@@color]
+
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+		
+		;Store new coordinations for next loop
+		push eax
+		push ebx
+
+		;Checks wall collision
+		cmp eax, 297							; (hou rekening met breedte kogel)
+		jge @@endWall
+		
+		;Checks ground collision
+		cmp ebx, 3								; (hou rekening met hoogte kogel)								
+		jle @@endGround
+
+
+		jmp @@tijdsloop
+
+	@@endWall:
+			call drawPixel, 297, ebx,  [@@color]
+			jmp @@end
+	@@endGround:
+			call drawPixel, eax, 2,  [@@color]
+
+	@@end:
+	ret
+ENDP drawbulletPath
 ; ----------------------------------------------------------------------------
 ; Mouse function
 ; AX = condition mask causing call
@@ -391,46 +477,31 @@ ENDP bulletPath
 
 PROC click
 	USES eax, ebx, ecx, edx
+	;Show mouse pointer
 	mov ax, 1
 	int 33h 
 	
+	;Booleanstate if mouse is clicked or unclicked
+
 	@@mousepressed:
 	and bl, 1			; check if right button of mouse is clicked
 	jz @@skipit			; only execute if a mousebutton is pressed
 
 	call drawtrajectory
-
-	@@skipit:
 	
+	@@skipit:
 	;call printSignedInteger, [@@a]
 	;call printSignedInteger, [@@b]
 	;call bulletPath, [@@a], [@@b]
 	;call showcursor
 	;call mouse_uninstall
+
+	
 	
 	ret
 ENDP click
 
-PROC mousehandler
-	USES eax, ecx, edx
 
-	;Display the mouse
-	mov ax, 1
-	int 33h 
-
-	movzx ebx, bl
-	call printSignedInteger, ebx
-	call mouse_let_go,  ebx
-	; if arrlen_mousecoord >=3:
-	mov ecx, [offset arrlen_mousecoord]
-	cmp ecx, 3
-	jl @@return
-
-	call moveElementofList3, offset arrlen_mousecoord
-
-	@@return:
-	ret
-ENDP mousehandler
 
 PROC mouse_let_go
 	ARG @@new_value: dword
@@ -586,8 +657,8 @@ PROC drawtrajectory
 
 	;call drawline, [@@x1], [@@y1], [@@oldXpos], [@@oldYpos], 0
 	;call drawline, [@@x1], [@@y1], [@@x2], [@@y2], 99
-	@@skipit:
 
+	@@skipit:
 	ret
 ENDP drawtrajectory
 
@@ -990,7 +1061,7 @@ PROC moveElementofList2
 	;cmp [dword ptr ebx], 8
 	;jne @@skip
 
-	sub  [dword ptr ebx], 2	; sub 2 to the actual value of arrlen_mouse so the length becomes 6 for the print procedure later
+	sub  [dword ptr ebx], 2	; sub 2 to the actual value of arrlen_mouse so the length becomes 4 for the print procedure later
 
 	mov ecx, 4		; counter for the loop
 
@@ -1007,32 +1078,8 @@ PROC moveElementofList2
 
 ENDP moveElementofList2
 
-PROC moveElementofList3
-	ARG @@arrayptr:dword
-	USES eax, ebx, ecx
-	
-	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
-	;First check if it's an array of 8 elements
-	;cmp [dword ptr ebx], 8
-	;jne @@skip
-
-	sub  [dword ptr ebx], 1	; sub 2 to the actual value of arrlen_mouse so the length becomes 6 for the print procedure later
-
-	mov ecx, 2		; counter for the loop
-
-	@@arrayloop:
-		add ebx, 8					;go 2 elements further
-		mov eax, [ebx]				;store this element in eax
-		sub ebx, 4					;go 1 elements back
-		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
-		loop @@arrayloop
-	
-	
-	@@skip:
-	ret
-
-ENDP moveElementofList3
-
+;----------------------------------------------------------
+;This is for mousehandling
 
 PROC get_X1_ofList
 	ARG @@arrayptr:dword RETURNS eax
@@ -1047,7 +1094,7 @@ ENDP get_X1_ofList
 
 PROC get_X2_ofList
 	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
+	USES ebx, ecx
 	mov ebx, [@@arrayptr]	; store pointer in ebx
 	mov ecx, [ebx]			; get length counter in ecx
 	@@arrayloop:
@@ -1072,7 +1119,7 @@ ENDP get_Y1_ofList
 
 PROC get_Y2_ofList
 	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
+	USES ebx, ecx
 	mov ebx, [@@arrayptr]	; store pointer in ebx
 	mov ecx, [ebx]			; get length counter in ecx
 	@@arrayloop:
@@ -1086,7 +1133,7 @@ ENDP get_Y2_ofList
 
 PROC get_oldX_ofList
 	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
+	USES ebx, ecx
 	mov ebx, [@@arrayptr]	; store pointer in ebx
 	mov ecx, [ebx]			; get length counter in ecx
 	@@arrayloop:
@@ -1100,7 +1147,7 @@ ENDP get_oldX_ofList
 
 PROC get_oldY_ofList
 	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
+	USES ebx, ecx
 	mov ebx, [@@arrayptr]	; store pointer in ebx
 	mov ecx, [ebx]			; get length counter in ecx
 	@@arrayloop:
@@ -1112,6 +1159,128 @@ PROC get_oldY_ofList
 	ret
 ENDP get_oldY_ofList
 
+;--------------------------------------------------------
+
+;---------------------------------------------------------
+;This is for boolean_mouse_dragged
+PROC get_X1_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	;mov ecx, [ebx]			; get length counter in ecx
+	add ebx, 8
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_X1_ofBoolList
+
+PROC get_X2_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx, ecx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 4
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_X2_ofBoolList
+
+PROC get_Y1_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	;mov ecx, [ebx]			; get length counter in ecx
+	add ebx, 12
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_Y1_ofBoolList
+
+PROC get_Y2_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx, ecx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_Y2_ofBoolList
+
+PROC get_oldX_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx, ecx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 16
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_oldX_ofBoolList
+
+PROC get_oldY_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx, ecx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 12
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_oldY_ofBoolList
+
+PROC get_B1_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	;mov ecx, [ebx]			; get length counter in ecx
+	add ebx, 4
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_B1_ofBoolList
+
+PROC get_B2_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx, ecx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov ecx, [ebx]			; get length counter in ecx
+	@@arrayloop:
+		add ebx, 4
+		loop @@arrayloop
+	sub ebx, 8
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_B2_ofBoolList
+
+PROC get_oldB_ofBoolList
+	ARG @@arrayptr:dword RETURNS eax
+	USES ebx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	;mov ecx, [ebx]			; get length counter in ecx
+	add ebx, 16
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP get_oldB_ofBoolList
+
+
+
+
+;--------------------------------------------------------------
 PROC drawCursor
 	ARG @@x:dword ,@@y:dword, @@color: dword
 	USES eax
@@ -1191,15 +1360,12 @@ PROC trajectory_y
 
 	ret
 ENDP trajectory_y
-PROC haha
-	USES eax
-	call waitForSpecificKeystroke, 001Bh
-	call printSignedInteger, 123
-	ret
-ENDP haha
 
+;-------------------------------------------
+;This is for mousehandling
 PROC undraw_last_trajectoryline
 	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@a: dword, @@b: dword
+	USES eax
 
 	call get_X1_ofList, offset arrlen_mousecoord
 	mov [@@x1], eax
@@ -1221,11 +1387,280 @@ PROC undraw_last_trajectoryline
 
 	call drawline, 25, 25, [@@a], [@@b], 0
 
+	call drawPixel, [@@x1], [@@y1], 0
+
 	call bulletPath, [@@a], [@@b]
 
 	ret
 ENDP undraw_last_trajectoryline
+;----------------------------------------------
 
+;-------------------------------------------
+;This is for boolean_mouse_dragged
+PROC undraw_last_bool_trajectoryline
+	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@a: dword, @@b: dword
+	USES eax
+
+	call get_X1_ofBoolList, offset arrlen_mousecoord
+	mov [@@x1], eax
+
+	call get_Y1_ofBoolList, offset arrlen_mousecoord
+	mov [@@y1], eax
+
+	call get_X2_ofBoolList, offset arrlen_mousecoord
+	mov [@@x2], eax
+
+	call get_Y2_ofBoolList, offset arrlen_mousecoord
+	mov [@@y2], eax
+
+	call trajectory_x, [@@x1], [@@x2]
+	mov [@@a], eax
+
+	call trajectory_y, [@@y1], [@@y2]
+	mov [@@b], eax
+
+	call drawline, 25, 25, [@@a], [@@b], 0
+
+	call drawPixel, [@@x1], [@@y1], 0
+
+	call bulletPath, [@@a], [@@b]
+
+	ret
+ENDP undraw_last_bool_trajectoryline
+;-------------------------------------------
+
+PROC reset
+	ARG	@@arrayptr:dword
+	USES eax, ebx, ecx, edx
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	mov [dword ptr ebx], 0	; add 1 to the actual value of arrlen_mouse for the print procedure later
+
+	ret
+ENDP reset
+
+PROC mousehandling
+	USES ebx, ecx
+	mov ecx, 5
+	
+	@@start_mousehandling:
+		call printSignedInteger, ecx
+		;draw trajectory
+
+		call 	mouse_install, offset click
+		;call printIntList, offset arrlen_mousecoord
+
+
+		;call 	release
+		;------------------------------------------
+		
+		call	waitForSpecificKeystroke, 001Bh
+
+		;Hide visible mouse pointer
+		mov ax, 2
+		int 33h 
+
+		;call printIntList, offset arrlen_mousecoord
+
+		call undraw_last_trajectoryline
+
+
+		call mouse_uninstall
+
+
+		call reset, offset arrlen_mousecoord
+
+		loop @@start_mousehandling
+	ret
+ENDP mousehandling
+
+PROC release
+	USES ebx, ecx
+	;2 beginvoorwaarden
+	;1) is de muis unclicked
+	;2) werd er al op de muis gelicked of maw is arrlen_mousecoord = 6
+	
+	@@bvw1:
+
+	;call printSignedInteger, [offset arrlen_mousecoord]
+	call	waitForSpecificKeystroke, 001Bh
+
+	call undraw_last_trajectoryline
+
+	call mouse_uninstall
+
+	call reset, offset arrlen_mousecoord
+
+	@@skipit:
+	ret
+ENDP release
+
+
+PROC boolean_mouse_dragged
+	USES eax, ebx, ecx, edx
+	LOCAL @@result: dword, @@boolean1:dword, @@x1: dword, @@y1: dword, @@boolean2: dword, @@x2: dword, @@y2: dword, @@oldBoolean: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
+
+	;Put initially result on 0
+	mov [@@result], 0
+
+	;Show mouse pointer
+	mov ax, 1
+	int 33h 
+	
+	;Boolean mouse clicked or unclicked
+	movzx eax, bl
+	;cmp eax, 0
+	;je @@skipit
+	
+	;Getting xcoord and ycoord
+	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
+   	movzx edx, dx		; get mouse height
+	mov ebx, 149
+	sub ebx, edx
+	mov edx, ebx
+
+	mov ebx,0
+	sar cx, 1			; horizontal cursor position is doubled in input 
+	movzx ebx, cx
+
+	;We will make a list containing boolean, xcoord and ycoord: [boolean1, x1, y1, oldBoolean, oldXpos, oldYpos, boolean2, x2, y2]
+	call appendList, offset arrlen_mousecoord, eax	;boolean
+	call appendList, offset arrlen_mousecoord, ebx	;xcoord
+	call appendList, offset arrlen_mousecoord, edx	;ycoord
+	
+
+	;First check if it's an array of 12 elements
+	; if arrlen_mousecoord >=3:
+	mov ecx, [offset arrlen_mousecoord]
+	cmp ecx, 12
+	jl @@skipit
+	call moveBoolElementofList, offset arrlen_mousecoord
+	;call printIntList, offset arrlen_mousecoord	
+
+	;Get first boolean
+	call get_B1_ofBoolList, offset arrlen_mousecoord
+	mov [@@boolean1], eax
+
+	;Get old boolean
+	call get_oldB_ofBoolList, offset arrlen_mousecoord
+	mov [@@oldBoolean], eax
+
+	;Get new boolean
+	call get_B2_ofBoolList, offset arrlen_mousecoord
+	mov [@@boolean2], eax
+
+	;Get x1
+	call get_X1_ofBoolList, offset arrlen_mousecoord
+	mov [@@x1], eax
+	
+	;Get y1
+	call get_Y1_ofBoolList, offset arrlen_mousecoord
+	mov [@@y1], eax
+
+	;Get x2
+	call get_X2_ofBoolList, offset arrlen_mousecoord
+	mov [@@x2], eax
+
+	;Get y2
+	call get_Y2_ofBoolList, offset arrlen_mousecoord
+	mov [@@y2], eax
+	;call printSignedInteger, [@@y2]
+
+	;Get oldXpos
+	call get_oldX_ofBoolList, offset arrlen_mousecoord
+	mov [@@oldXpos], eax
+
+	;Get oldYpos
+	call get_oldY_ofBoolList, offset arrlen_mousecoord
+	mov [@@oldYpos], eax
+
+	;if oldBoolean is 1 do this
+	cmp [@@boolean1], 1
+	jne @@reset
+
+	;Draw a pixel on the place where the mouse has first clicked
+	call drawPixel, [@@x1], [@@y1], 99
+
+	;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
+	call trajectory_x, [@@x1], [@@oldXpos]
+	mov [@@a], eax
+
+	call trajectory_y, [@@y1], [@@oldYpos]
+	mov [@@b], eax
+
+	call drawline, 25, 25, [@@a], [@@b], 0
+
+
+	call trajectory_x, [@@x1], [@@x2]
+	mov [@@a], eax
+
+
+	call trajectory_y, [@@y1], [@@y2]
+	mov [@@b], eax
+
+
+	call drawline, 25, 25, [@@a], [@@b], 99
+
+
+
+
+	;The state where the mouse is let go is: [oldBoolean = 1 and boolean2 = 0]
+	cmp [@@oldBoolean], 1
+	jne @@skipit
+	cmp [@@boolean2], 0
+	jne @@skipit
+	mov [@@result], 1
+
+
+
+	@@skipit:
+	
+	;call printSignedInteger, [@@result]
+
+
+	cmp [@@result], 1
+	jne @@return
+
+	;Hide visible mouse pointer
+	mov ax, 2
+	int 33h 
+
+	;Hide trajectoryline + hide startpoint + throw bullet
+	call undraw_last_bool_trajectoryline
+
+
+	@@reset:
+	call reset, offset arrlen_mousecoord
+	
+	@@return:
+
+	ret
+
+	
+ENDP boolean_mouse_dragged
+
+PROC moveBoolElementofList
+	ARG @@arrayptr:dword
+	USES eax, ebx, ecx
+	
+	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
+
+	sub  [dword ptr ebx], 3	; sub 3 to the actual value of arrlen_mouse so the length becomes 9 for the print procedure later
+
+	add ebx, 12		;Go to the 3rd element
+	mov ecx, 6		; counter for the loop
+
+	@@arrayloop:
+		add ebx, 16					;go 4 elements further
+		mov eax, [ebx]				;store this element in eax
+		sub ebx, 12					;go 3 elements back
+		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
+		loop @@arrayloop
+	
+	
+	@@skip:
+	ret
+
+ENDP moveBoolElementofList
 
 PROC main
 	sti
@@ -1280,14 +1715,8 @@ PROC main
 
 	;call printSignedInteger,[arrlen_mousecoord] 	;I changed the value of arrlen_mousecoord 
 
-	@@start_mousehandling:
-		;draw trajectory
-		call 	mouse_install, offset click
-		
-		call	waitForSpecificKeystroke, 001Bh
-		call undraw_last_trajectoryline
+	
 
-		call mouse_uninstall
 		
 	
 	;call 	mouse_install, offset mousehandler
@@ -1302,7 +1731,15 @@ PROC main
 
 	;call 	printIntList, offset arrlen_mousecoord
 	
+	;Draw trajectory with mouse and click on ESC to confirm to shoot
+	;call mousehandling
 
+
+	call 	mouse_install, offset boolean_mouse_dragged
+
+
+
+	;call drawbulletPath, 25, 25, 99
 
 
 
