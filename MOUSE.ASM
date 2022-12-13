@@ -1,20 +1,8 @@
 ;=============================================================================
-; 32-bit Assembler Random Number Generation.
+; 32-bit Assembler Mouse library.
 ;
 ; For use under DMPI 0.9 protected mode.
 ;
-; The pseudo random generator is basically a Linear congruential generator, as
-; explained on https://en.wikipedia.org/wiki/Linear_congruential_generator.
-;
-; This implementation assumes a modulo of 2^32.
-;
-; The constants are use from C99 and C11.
-;
-; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-;	
-;	This is a corrected version with a uniform output random distribution
-;	David Blinder, 2017
-;	
 ; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 ;
 ; Copyright (c) 2015, Tim Bruylants <tim.bruylants@gmail.com>
@@ -54,22 +42,19 @@ P386
 MODEL FLAT, C
 ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
-INCLUDE "rand.inc"
-
-RAND_A = 1103515275
-RAND_C = 12345
-;RAND_M = 2^32
+INCLUDE "mouse.inc"
 
 ;=============================================================================
 ; Uninitialized DATA
 ;=============================================================================
 UDATASEG
-    rand_seed   dd ?
 
 ;=============================================================================
 ; DATA
 ;=============================================================================
 DATASEG
+
+custom_mouse_handler    dd ?
 
 ;=============================================================================
 ; CODE
@@ -77,64 +62,113 @@ DATASEG
 CODESEG
 
 ;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-; Initialize the random number generator.
+; Test if mouse is present or not.
+;
+; ARGUMENTS:
+;   none
+; RETURNS:
+;   EAX     1 if mouse available
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+PROC mouse_present
+    USES    ebx
+
+    mov     eax, 0
+    int     33h
+
+    and     eax, 1
+
+    ret
+ENDP mouse_present
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Internal mouse handler.
+;
+; Requires special attention, as this procedure gets called by the mouse
+; driver, through the DOS Protected Mode extender.
 ;
 ; ARGUMENTS:
 ;   none
 ; RETURNS:
 ;   nothing
 ;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-PROC rand_init
-    USES    eax, ecx, edx
+PROC mouse_internal_handler NOLANGUAGE
+    push    ds
+    push    es
+    push    ax
 
-    mov     ah, 02ch        ; Get system time
-    int     21h
+    mov     ax, [cs:theDS]
+    mov     ds, ax
+    mov     es, ax
 
-    mov     ax, dx          ; Use time to generate seed in EAX
-    shl     eax, 16
-    mov     ax, cx
+    pop     ax
 
-    mov     ah, 02ah        ; Get system date
-    int     21h
-
-    shl     ecx, 16         ; Mangle date into the seed in EAX
-    mov     cx, dx
-    xor     eax, ecx
+    call    [custom_mouse_handler]
     
-    mov     [rand_seed], eax
+    pop     es
+    pop     ds
+    
+    retf
 
-    ret
-ENDP rand_init
+    ; Internal variable to keep track of DS
+    theDS   dw  ?
+ENDP mouse_internal_handler
 
 ;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-; Returns the next (pseudo) random number in EAX.
+; Install mouse handler.
+;
+; ARGUMENTS:
+;   address of the custom mouse handler
+; RETURNS:
+;   nothing
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+PROC mouse_install
+    ARG     @@custom_handler
+    USES    eax, ecx, edx, es
+
+    call    mouse_present
+    cmp     eax, 1
+    jne     @@no_mouse
+
+    mov     eax, [@@custom_handler]
+    mov     [custom_mouse_handler], eax
+
+    push    ds
+    mov     ax, cs
+    mov     ds, ax
+    ASSUME  ds:_TEXT
+    mov     [theDS], ax
+    ASSUME  ds:FLAT
+    pop     ds
+
+    mov     eax, 0ch
+    mov     ecx, 255
+    push    cs
+    pop     es
+    mov     edx, offset mouse_internal_handler
+    int     33h
+
+@@no_mouse:
+    ret
+ENDP mouse_install
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Uninstall mouse handler.
 ;
 ; ARGUMENTS:
 ;   none
 ; RETURNS:
-;   EAX     Random 8-bit value
+;   nothing
 ;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-PROC rand
-    USES    ebx, ecx, edx
+PROC mouse_uninstall
+    USES    eax, ecx, edx
 
-    mov     eax, [rand_seed]
-    mov     ecx, RAND_A
-    mul     ecx
-    add     eax, RAND_C
-    mov		ebx, eax
-	shr		ebx, 16
-	
-	mul		ecx
-	add     eax, RAND_C
-	mov     [rand_seed], eax
-	mov		ax, bx
-; optimise ca sal fdp
-    mov ebx, 256
-    xor edx, edx
-    div ebx
-    mov eax, edx
+    mov     eax, 0ch
+    mov     ecx, 0
+    mov     edx, 0
+    int     33h
+
     ret
-ENDP rand
+ENDP mouse_uninstall
 
 END
 
