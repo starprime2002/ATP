@@ -589,6 +589,7 @@ ENDP bulletPath
 PROC P_positive ;P = P + 2*dy - 2*dx
 	ARG @@P: dword, @@dx: dword, @@dy: dword RETURNS eax
 	USES ebx
+
 	mov eax, [@@dy]					
 	mov ebx, 2
 	mul ebx
@@ -598,7 +599,6 @@ PROC P_positive ;P = P + 2*dy - 2*dx
 	mov ebx, 2
 	mul ebx
 	sub [@@P], eax 
-
 	mov eax, [@@P]
 	
 	ret
@@ -612,9 +612,7 @@ PROC P_negative ;P = P + 2*dy
 	mov ebx, 2
 	mul ebx
 	add [@@P], eax	
-
 	mov eax, [@@P]
-	;call printSignedInteger, eax
 
 	ret
 ENDP P_negative
@@ -845,22 +843,20 @@ PROC drawline
 ENDP drawline
 
 PROC appendList
-	ARG @@arrayptr:dword, @@new_value: dword
+	ARG @@arrayptr:dword, @@new_value:dword
 	USES eax, ebx, ecx
 
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	add  [dword ptr ebx], 1	; add 1 to the actual value of arrlen_mouse for the print procedure later
-	add ecx, 1	;add 1 to counter of this loop
+	mov ebx, [@@arrayptr]			; store pointer in ebx
+	add [dword ptr ebx], 1			; add 1 to the actual value of arrlen_mouse for the print procedure later
+	mov ecx, [ebx]					; get length counter in ecx
 	@@arrayloop:
 		add ebx, 4
 		loop @@arrayloop
 
 	mov eax, [@@new_value]
-	mov [dword ptr ebx], eax	; putting the new value after the last element of the list
+	mov [dword ptr ebx], eax		; putting the new value after the last element of the list
 
 	ret
-
 ENDP appendList
 
 ;---------------------------------------------------------
