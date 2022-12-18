@@ -22,8 +22,8 @@ SCRWIDTH EQU 320        ; screen witdth
 SCRHEIGHT EQU 200       ; screen height 
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
 FRAQBIT EQU 128         ; fractionele bit  
-TIMESTEP EQU 16
-GRAVITY EQU -40*FRAQBIT
+TIMESTEP EQU 32
+GRAVITY EQU -150*FRAQBIT
 
 CODESEG 
 
@@ -165,7 +165,8 @@ PROC wait_VBLANK
 ENDP wait_VBLANK
 
 PROC updateColorpallete
-    USES eax, ebx, ecx, edx 
+    ARG @@NumberOfColors:byte
+    USES eax, ebx, edx
 
     mov ebx, offset palette 
 	mov ah, 0 
@@ -189,7 +190,7 @@ PROC updateColorpallete
         add ebx, 4
 
         inc ah
-        cmp ah, 5
+        cmp ah, [@@NumberOfColors]
         jne @@kleur
 
     ret
@@ -894,7 +895,7 @@ PROC boolean_mouse_dragged
 	mov [@@b], eax
 
 
-	call drawTrajectory, 25*FRAQBIT, 25*FRAQBIT, [@@a], [@@b], 200
+	call drawTrajectory, 25*FRAQBIT, 25*FRAQBIT, [@@a], [@@b], 4
 
 	;The state where the mouse is let go is: [oldBoolean = 1 and boolean2 = 0]
 	cmp [@@oldBoolean], 1
@@ -942,7 +943,7 @@ PROC main
     call    setVideoMode, 13h
     finit   ; initialize FPU
 
-    call    updateColorpallete
+    call    updateColorpallete, 10
     call    fillBackground
 
 	call 	mouse_install, offset boolean_mouse_dragged
@@ -965,6 +966,7 @@ DATASEG
                     dd 31, 63, 0                            ;grass
                     dd 53, 26, 8                            ;wall
                     dd 55, 5, 15                            ;target
+                    dd 63, 63, 40                            ;target
     arrlen_mousecoord dd 0
 ; -------------------------------------------------------------------
 ; STACK
