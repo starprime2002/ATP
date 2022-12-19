@@ -19,11 +19,22 @@ INCLUDE "mouse.inc"
 ; Constants 
 VMEMADR EQU 0A0000h     ; video memory address 
 SCRWIDTH EQU 320        ; screen witdth 
-SCRHEIGHT EQU 200       ; screen height 
+SCRHEIGHT EQU 200       ; screen height
+SKYHEIGHT EQU 150
+WALLVERPOS EQU 50
+WALLHORPOS EQU 290
+WALLHEIGHT EQU 100
+WALLWIDTH EQU 15
+TARGETVERPOS EQU 80
+TARGETHORPOS EQU 288
+TARGETHEIGHT EQU 10
+TARGETWIDTH EQU 4
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
 FRAQBIT EQU 128         ; fractionele bit  
-TIMESTEP EQU 32
-GRAVITY EQU -150*FRAQBIT
+TIMESTEP EQU 64
+GRAVITY EQU -140*FRAQBIT
+STARTINGX EQU 40*FRAQBIT
+STARTINGY EQU 25*FRAQBIT
 
 CODESEG 
 
@@ -207,82 +218,60 @@ PROC fillBackground
     USES    eax, ebx, ecx, edx, edi
 
     ; Initialize video memory address.
-    mov edi, VMEMADR                        ; edi is destination adress en is dus hier 0A0000h
+    mov edi, VMEMADR                ; edi is destination adress en is dus hier 0A0000h
 
     ; Draw sky
-    mov ecx, SCRWIDTH*150                   ; ecx = amount of elements = aantal pixels
-    mov al, 0                               ; indx of the first color to change
-    rep stosb           ; stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
-                        ;stosw (word) = transfer two byte (= word)
-                        ;stosd (double word) = tranfer 4 bytes (= double word)
+    mov ecx, SCRWIDTH*SKYHEIGHT     ; ecx = amount of elements = aantal pixels
+    mov al, 0                       ; indx of the first color to change
+    rep stosb                       ;stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
 
     ; Draw grass 
-    mov edi, VMEMADR
-    add edi, 150*320
+    add edi, ecx
+    mov ecx, SCRWIDTH*(SCRHEIGHT-SKYHEIGHT)
     mov al, 1
-    mov edx, 50
-    @@heigtWall:
-        mov ecx, 320
-        @@widthWall:
-            mov [edi], al
-            inc edi
-            dec ecx
-            cmp ecx, 0
-            jne @@widthWall
-        dec edx
-        cmp edx, 0
-        jne @@heigtWall
+    rep stosb
+    
+    ; Draw Wall = rectangle (300, 50)-(309, 149)
+    mov edx, 0                                  ; Layer of wall 0-99
+    @@drawWall:
+        mov eax, WALLVERPOS 
+        add eax, edx
+        mov ebx, 320
+        push edx
+        mul ebx
+        pop edx
+        add eax, WALLHORPOS
 
-    ; Draw wall
-    mov edx, 1
-    @@heigthWall:
-        xor ebx, ebx
-        mov ebx, 50
-        add ebx, edx
-        mov eax, 320
-        push edx
-        mul ebx
-        pop edx
-        mov ebx, eax
-        add ebx, 300
         mov edi, VMEMADR
-        add edi, ebx
+        add edi, eax
+        mov ecx, WALLWIDTH
         mov al, 2
-        mov ecx, 10
-            @@WidthWall:
-                mov [edi], al
-                inc edi
-                dec ecx
-                cmp ecx, 0
-                jne @@WidthWall
+        rep stosb
+
         inc edx
-        cmp edx, 100
-        jne @@heigthWall
-    ; Draw target 
-    mov edx, 0 
-    @@heigthTarget: 
-        xor ebx, ebx
-        mov ebx, 100
-        add ebx, edx
-        mov eax, 320
+        cmp edx, WALLHEIGHT
+        jne @@drawWall
+
+    ; Draw target = rectangle (300, 50)-(309, 149)
+    mov edx, 0                                  ; Layer of Target
+    @@drawTarget:
+        mov eax, TARGETVERPOS
+        add eax, edx
+        mov ebx, 320
         push edx
         mul ebx
         pop edx
-        mov ebx, eax
-        add ebx, 298
+        add eax, TARGETHORPOS
+
         mov edi, VMEMADR
-        add edi, ebx
+        add edi, eax
+        mov ecx, TARGETWIDTH
         mov al, 3
-        mov ecx, 2
-            @@WidthTarget:
-                mov [edi], al
-                inc edi
-                dec ecx
-                cmp ecx, 0
-                jne @@WidthTarget
+        rep stosb
+
         inc edx
-        cmp edx, 10
-        jne @@heigthTarget
+        cmp edx, TARGETHEIGHT
+        jne @@drawTarget
 
     ret
 ENDP fillBackground
@@ -290,22 +279,24 @@ ENDP fillBackground
 ;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
 PROC drawPixel                              ; input zijn in fractionele bits
     ARG @@xcoord:dword ,@@ycoord:dword, @@color:byte
-    USES eax, ebx
+    USES eax, ebx, edx, edi
 
     mov edi, VMEMADR
+    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT
     mov eax, [@@ycoord]                 ; Can be both positive or negative
     mov ebx, FRAQBIT
-    mov edx, 0
+    xor edx, edx
     cmp eax, 0
-    jge @@positivevy
+    jge @@positive
     mov edx, ALLONES
-    @@positivevy:
+    @@positive:
     idiv ebx
     mov ebx, 149
     sub ebx, eax
     mov eax, 320
     imul ebx
     add edi, eax
+    ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
     mov eax, [@@xcoord]                     ;can only be positive
     mov ebx, FRAQBIT
     div ebx
@@ -315,6 +306,37 @@ PROC drawPixel                              ; input zijn in fractionele bits
 
     ret
 ENDP drawPixel
+
+PROC getColor                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword RETURNS al
+    USES ebx, edx, edi
+
+    mov edi, VMEMADR
+    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT
+    mov eax, [@@ycoord]                 ; Can be both positive or negative
+    mov ebx, FRAQBIT
+    xor edx, edx
+    cmp eax, 0
+    jge @@positive
+    mov edx, ALLONES
+    @@positive:
+    idiv ebx
+    mov ebx, 149
+    sub ebx, eax
+    mov eax, 320
+    imul ebx
+    add edi, eax
+    ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
+    mov eax, [@@xcoord]                     ;can only be positive
+    mov ebx, FRAQBIT
+    div ebx
+    add edi, eax
+
+    xor eax, eax
+    mov al, [edi]
+
+    ret
+ENDP getColor
 
 ;Mandatory for physics simulation
 PROC updateValue
@@ -382,50 +404,126 @@ PROC moveBullet                             ; input zijn in fractionele bits
     ret
 ENDP moveBullet
 
+PROC deleteBullet                             ; input zijn in fractionele bits
+    ARG @@Xpos:dword, @@Ypos:dword
+    USES eax, ebx
+
+    mov eax, [@@Xpos]
+    mov ebx, [@@Ypos]
+
+    call drawPixel, eax, ebx, 0
+    add eax, FRAQBIT
+    call drawPixel, eax, ebx, 0
+    sub eax, FRAQBIT
+    add ebx, FRAQBIT
+    call drawPixel, eax, ebx, 0
+    sub ebx, FRAQBIT
+    sub eax, FRAQBIT
+    call drawPixel, eax, ebx, 0
+    add eax, FRAQBIT
+    sub ebx, FRAQBIT
+    call drawPixel, eax, ebx, 0
+
+    ret
+ENDP deleteBullet
+
+PROC drawBullet                             ; input zijn in fractionele bits
+    ARG @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
+    USES eax, ebx
+
+    ;Delete previous bullet
+    mov eax, [@@Xpos]
+    mov ebx, [@@Ypos]
+
+    call drawPixel, eax, ebx, [@@colorBullet]
+    add eax, FRAQBIT
+    call drawPixel, eax, ebx, 5
+    sub eax, FRAQBIT
+    add ebx, FRAQBIT
+    call drawPixel, eax, ebx, 5
+    sub ebx, FRAQBIT
+    sub eax, FRAQBIT
+    call drawPixel, eax, ebx, 5
+    add eax, FRAQBIT
+    sub ebx, FRAQBIT
+    call drawPixel, eax, ebx, 5
+
+    ret
+ENDP drawBullet
+
 ; Checks    if the bullet collided with wall or ground
 ;           if the bullet is out of border
 PROC checkCollision                                     ;te optimisere
     ARG @@xpos:dword, @@ypos:dword RETURNS ecx
-    USES eax, ebx
+    USES eax, ebx, edx
 
-    mov eax, [@@xpos]
-    mov ebx, [@@ypos]
     xor ecx, ecx
 
     @@groundCheck:
-        cmp ebx, 2*FRAQBIT
-        jg @@wallCheck
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        sub edx, eax
+        call getColor, ebx, edx
+        cmp eax, 1
+        jne @@targetCheck
         mov ecx, 1
         jmp @@collisionEnd
-    @@wallCheck:                        ; Wall = (300,0)-(309,99)
-        cmp eax, 295*FRAQBIT
-        jl @@upperCheck
-        cmp eax, 319*FRAQBIT
-        jg @@upperCheck
-        cmp ebx, 100*FRAQBIT
-        jg @@wall2Check
+
+    @@targetCheck:                        ; Wall = (300,0)-(309,99)
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        add ebx, eax
+        call getColor, ebx, edx
+        cmp eax, 3
+        jne @@wallCheck
+        call printSignedInteger, eax
         mov ecx, 2
         jmp @@collisionEnd
-    @@wall2Check:                        ; Wall = (300,0)-(309,99)
-        cmp ebx, 102*FRAQBIT
-        jg @@upperCheck
+
+    @@wallCheck:                        ; Wall = (300,0)-(309,99)
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        add ebx, eax
+        call getColor, ebx, edx
+        cmp eax, 2
+        jne @@onTheWallCheck
         mov ecx, 3
-        jmp @@collisionEnd        
-    @@upperCheck:
-        cmp ebx, 150*FRAQBIT
-        jl @@leftBoundCheck
+        jmp @@collisionEnd
+
+    @@onTheWallCheck:                        ; Wall = (300,0)-(309,99)
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        sub edx, eax
+        call getColor, ebx, edx
+        cmp eax, 2
+        jne @@upperCheck
         mov ecx, 4
         jmp @@collisionEnd
-    @@leftBoundCheck:
-        cmp eax, 0*FRAQBIT
-        jge @@rightBoundCheck
+
+    mov ebx, [@@xpos]
+    mov edx, [@@ypos]
+    @@upperCheck:
+        cmp edx, 148*FRAQBIT
+        jle @@leftBoundCheck
         mov ecx, 5
         jmp @@collisionEnd
-    @@rightBoundCheck:
-        cmp eax, 320*FRAQBIT
-        jl @@noCollision
+
+    @@leftBoundCheck:
+        cmp ebx, 1*FRAQBIT
+        jge @@rightBoundCheck
         mov ecx, 6
         jmp @@collisionEnd
+
+    @@rightBoundCheck:
+        cmp ebx, 318*FRAQBIT
+        jle @@noCollision
+        mov ecx, 7
+        jmp @@collisionEnd
+
     @@noCollision:
         mov ecx, 0
         jmp @@collisionEnd
@@ -436,103 +534,99 @@ ENDP checkCollision
 
 ; To replace bulllet once collided
 PROC replaceBullet
-    ARG @@collisionType:byte, @@oldXpos:dword, @@oldYpos:dword, @@colorBullet:dword
+    ARG @@collisionType:byte, @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
     LOCAL @@waittime:dword
     USES ecx
 
     mov [@@waittime], 50
+    call deleteBullet, [@@Xpos], [@@Ypos]
 
     cmp ecx, 1
     je @@groundCase
     cmp ecx, 2
-    je @@wallCase
+    je @@targetCase
     cmp ecx, 3
-    je @@wall2Case
+    je @@wallCase
     cmp ecx, 4
-    je @@upperLimitCase
+    je @@onTheWallCase
     cmp ecx, 5
-    je @@leftLimitCase
+    je @@upperLimitCase
     cmp ecx, 6
+    je @@leftLimitCase
+    cmp ecx, 7
     je @@rightLimitCase
 
     @@groundCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 2*FRAQBIT, [@@colorBullet] 
+        call drawBullet, [@@Xpos], 1*FRAQBIT, [@@colorBullet]
         call printString, offset msgGround
         call wait_VBLANK, [@@waittime]
-        call moveBullet, [@@oldXpos], 2*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
+        call deleteBullet, [@@Xpos], 1*FRAQBIT
         jmp @@endReplacement
-    @@wallCase:
-        jmp @@succesCheck
-        @@noSucces:
-        call moveBullet, [@@oldXpos], [@@oldYpos], 297*FRAQBIT, [@@oldYpos], [@@colorBullet]
-        call printString, offset msgWall
-        call wait_VBLANK, [@@waittime]
-        call moveBullet, 297*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
-        jmp @@endReplacement
-    @@wall2Case:
-        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 101*FRAQBIT, [@@colorBullet]
-        call printString, offset msgWall
-        call wait_VBLANK, [@@waittime]
-        call moveBullet, [@@oldXpos], 101*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
-        jmp @@endReplacement
-    @@upperLimitCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], [@@oldXpos], 149*FRAQBIT, [@@colorBullet]
-        call printString, offset msgTooHigh
-        call wait_VBLANK, [@@waittime]
-        call moveBullet, [@@oldXpos], 149*FRAQBIT, 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
-        jmp @@endReplacement
-    @@leftLimitCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], 0, [@@oldYpos], [@@colorBullet]
-        call printString, offset msgOutOfBound
-        call wait_VBLANK, [@@waittime]
-        call moveBullet, 0, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
-        jmp @@endReplacement
-    @@rightLimitCase:
-        call moveBullet, [@@oldXpos], [@@oldYpos], 317*FRAQBIT, [@@oldYpos], [@@colorBullet]
-        call printString, offset msgOutOfBound
-        call wait_VBLANK, [@@waittime]
-        call moveBullet, 317*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
-        jmp @@endReplacement
-
-    @@succesCheck:
-        mov ecx, [@@oldYpos]
-        cmp ecx, 42*FRAQBIT
-        jl @@noSucces
-        cmp ecx, 52*FRAQBIT
-        jg @@noSucces
-        call moveBullet, [@@oldXpos], [@@oldYpos], 295*FRAQBIT, [@@oldYpos], [@@colorBullet]
+        
+    @@targetCase:
+        call drawBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
         call printString, offset msgSucces
         call wait_VBLANK, [@@waittime]
-        call moveBullet, 295*FRAQBIT, [@@oldYpos], 25*FRAQBIT, 25*FRAQBIT, [@@colorBullet]
+        call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
+        jmp @@endReplacement
+
+    @@wallCase:
+        call drawBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call printString, offset msgWall
+        call wait_VBLANK, [@@waittime]
+        call deleteBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos]
+        jmp @@endReplacement
+        
+    @@onTheWallCase:
+        call drawBullet, [@@Xpos], (149-WALLVERPOS+2)*FRAQBIT, [@@colorBullet]    
+        call printString, offset msgWall
+        call wait_VBLANK, [@@waittime]
+        call deleteBullet, [@@Xpos], 101*FRAQBIT
+        jmp @@endReplacement
+
+    @@upperLimitCase:
+        call drawBullet, [@@Xpos], 148*FRAQBIT, [@@colorBullet]
+        call printString, offset msgTooHigh
+        call wait_VBLANK, [@@waittime]
+        call deleteBullet, [@@Xpos], 148*FRAQBIT
+        jmp @@endReplacement
+    
+    @@leftLimitCase:
+        call drawBullet, 1*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call printString, offset msgOutOfBound
+        call wait_VBLANK, [@@waittime]
+        call deleteBullet, 1*FRAQBIT, [@@Ypos]
+        jmp @@endReplacement
+
+    @@rightLimitCase:
+        call drawBullet, 318*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call printString, offset msgOutOfBound
+        call wait_VBLANK, [@@waittime]
+        call deleteBullet, 318*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
 
     @@endReplacement:
+        call drawBullet, STARTINGX, STARTINGY, [@@colorBullet]
+
     ret
 ENDP replaceBullet
 
 ;Initialize a throw
 PROC bulletPath
-    ARG @@vxbegin:dword, @@vybegin:dword
-    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword, @@colorBullet:dword
+    ARG @@vxbegin:dword, @@vybegin:dword, @@colorBullet:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
     USES eax, ebx, ecx, edx
 
     mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
 	;Startingposition
-    mov [@@xpos], 25*FRAQBIT        ;[distance unit] 
-    mov [@@ypos], 25*FRAQBIT        ;[distance unit]
+    mov [@@xpos], STARTINGX        ;[distance unit] 
+    mov [@@ypos], STARTINGY        ;[distance unit]
     mov eax, [@@vxbegin]            ;[distance/time]
     mov [@@vx], eax                 ;[pixels/time]
     mov eax, [@@vybegin]            ;[distance/time]
     mov [@@vy], eax
-    mov [@@ax], 0                   ;[distance/timeÂ²]
-    mov [@@ay], GRAVITY         	;[distance/timeÂ²] downward accelaration due to "gravity" -9.81 = -10 here
-
-    ;Color bullet
-    call rand_init
-    call rand
-    mov [@@colorBullet], eax
-
-    call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos], [@@colorBullet]
+    mov [@@ax], 0                   ;[distance/time²]
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
     xor ecx, ecx
     @@tijdsloop: 
@@ -550,7 +644,7 @@ PROC bulletPath
         call updateValue, [@@vy], [@@ay], [@@dt]
         mov [@@vy], eax
 
-
+        ;call checkCollision2, [@@xpos], [@@ypos]
         call checkCollision, [@@xpos], [@@ypos]
         cmp ecx, 0
         jne @@endPath
@@ -559,8 +653,9 @@ PROC bulletPath
         ;Bring back old coordinations
         pop ebx
         pop eax
-        ; displace bullet
-        call moveBullet, eax, ebx, [@@xpos], [@@ypos], [@@colorBullet]
+        call deleteBullet, eax, ebx
+        call drawBullet, [@@xpos], [@@ypos], [@@colorBullet]
+        
         ;Store new coordinations for next loop
         mov eax, [@@xpos]
         mov ebx, [@@ypos]
@@ -572,10 +667,7 @@ PROC bulletPath
                                                 ; = FRAQBITS time unit
         jmp @@tijdsloop 
 
-
         @@endPath:
-    	;call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
-
         ;Bring back old coordinations
         pop ebx
         pop eax
@@ -600,8 +692,8 @@ PROC drawTrajectory
 
     mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
 	;Startingposition
-    mov [@@xpos], 25*FRAQBIT        ;[distance unit] 
-    mov [@@ypos], 25*FRAQBIT        ;[distance unit]
+    mov [@@xpos], STARTINGX        ;[distance unit] 
+    mov [@@ypos], STARTINGY        ;[distance unit]
 	pop eax
     mov [@@vx], eax                 ;[pixels/time]
 	pop eax
@@ -761,7 +853,7 @@ PROC getDeltaX
 	sub eax, [@@x1]
 	mov [@@dx], eax
 
-	mov eax, 25*FRAQBIT
+	mov eax, STARTINGX
 	sub eax, [@@dx]
 
 	;Chech if eax is greater than 0, else put it on 0
@@ -782,7 +874,7 @@ PROC getDeltaY
 	sub eax, [@@y1]
 	mov [@@dy], eax
 
-	mov eax, 25*FRAQBIT
+	mov eax, STARTINGY
 	sub eax, [@@dy]
 
 	ret
@@ -811,7 +903,7 @@ ENDP moveElementsOfList
 
 PROC boolean_mouse_dragged
 	USES eax, ebx, ecx, edx
-	LOCAL @@result: dword, @@boolean1:dword, @@x1: dword, @@y1: dword, @@boolean2: dword, @@x2: dword, @@y2: dword, @@oldBoolean: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
+	LOCAL @@result: dword, @@boolean1:dword, @@x1: dword, @@y1: dword, @@boolean2: dword, @@x2: dword, @@y2: dword, @@oldBoolean: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword, @@colorBullet:dword
 
 	;Put initially result on 0
 	mov [@@result], 0
@@ -877,7 +969,7 @@ PROC boolean_mouse_dragged
 	jne @@reset
 
 	;Draw a pixel on the place where the mouse has first clicked
-	call drawPixel, [@@x1], [@@y1], 99
+	call drawPixel, [@@x1], [@@y1], 70
 
 	;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
 	call getDeltaX, [@@x1], [@@oldXpos]
@@ -886,7 +978,7 @@ PROC boolean_mouse_dragged
 	call getDeltaY, [@@y1], [@@oldYpos]
 	mov [@@b], eax
 
-	call drawTrajectory, 25*FRAQBIT, 25*FRAQBIT, [@@a], [@@b], 0
+	call drawTrajectory, STARTINGX, STARTINGY, [@@a], [@@b], 0
 
 
 	call getDeltaX, [@@x1], [@@x2]
@@ -895,7 +987,7 @@ PROC boolean_mouse_dragged
 	mov [@@b], eax
 
 
-	call drawTrajectory, 25*FRAQBIT, 25*FRAQBIT, [@@a], [@@b], 4
+	call drawTrajectory, STARTINGX, STARTINGY, [@@a], [@@b], 4
 
 	;The state where the mouse is let go is: [oldBoolean = 1 and boolean2 = 0]
 	cmp [@@oldBoolean], 1
@@ -914,14 +1006,20 @@ PROC boolean_mouse_dragged
 	int 33h 
 
 	;Hide trajectoryline + hide startpoint 
-	call drawTrajectory, 25*FRAQBIT, 25*FRAQBIT, [@@a], [@@b], 0
+	call drawTrajectory, STARTINGX, STARTINGY, [@@a], [@@b], 0
+
+    ;Color bullet
+    call rand_init
+    call rand
+    mov [@@colorBullet], eax
+    call drawBullet, STARTINGX, STARTINGY, [@@colorBullet]
 
 	;Throw bullet
 	mov eax ,[@@a]
-	sub eax, 25*FRAQBIT
+	sub eax, STARTINGX
 	mov ebx ,[@@b]
-	sub ebx, 25*FRAQBIT
-	call bulletPath, eax, ebx
+	sub ebx, STARTINGY
+	call bulletPath, eax, ebx, [@@colorBullet]
 
 	@@reset:
 		mov ebx, offset arrlen_mousecoord
@@ -943,7 +1041,7 @@ PROC main
     call    setVideoMode, 13h
     finit   ; initialize FPU
 
-    call    updateColorpallete, 10
+    call    updateColorpallete, 6
     call    fillBackground
 
 	call 	mouse_install, offset boolean_mouse_dragged
@@ -966,7 +1064,9 @@ DATASEG
                     dd 31, 63, 0                            ;grass
                     dd 53, 26, 8                            ;wall
                     dd 55, 5, 15                            ;target
-                    dd 63, 63, 40                            ;target
+                    dd 63, 63, 40                           ;Aimline
+                    dd 32, 32, 32                           ;Bullet
+
     arrlen_mousecoord dd 0
 ; -------------------------------------------------------------------
 ; STACK
