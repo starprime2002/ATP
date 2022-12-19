@@ -22,11 +22,11 @@ SCRWIDTH EQU 320        ; screen witdth
 SCRHEIGHT EQU 200       ; screen height
 SKYHEIGHT EQU 150
 WALLVERPOS EQU 50
-WALLHORPOS EQU 290
+WALLHORPOS EQU 300
 WALLHEIGHT EQU 100
-WALLWIDTH EQU 15
+WALLWIDTH EQU 12
 TARGETVERPOS EQU 80
-TARGETHORPOS EQU 288
+TARGETHORPOS EQU 298
 TARGETHEIGHT EQU 10
 TARGETWIDTH EQU 4
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
@@ -34,7 +34,7 @@ FRAQBIT EQU 128         ; fractionele bit
 TIMESTEP EQU 64
 GRAVITY EQU -140*FRAQBIT
 STARTINGX EQU 40*FRAQBIT
-STARTINGY EQU 25*FRAQBIT
+STARTINGY EQU 20*FRAQBIT
 
 CODESEG 
 
@@ -614,7 +614,7 @@ ENDP replaceBullet
 ;Initialize a throw
 PROC bulletPath
     ARG @@vxbegin:dword, @@vybegin:dword, @@colorBullet:dword
-    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
     USES eax, ebx, ecx, edx
 
     mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
@@ -625,7 +625,6 @@ PROC bulletPath
     mov [@@vx], eax                 ;[pixels/time]
     mov eax, [@@vybegin]            ;[distance/time]
     mov [@@vy], eax
-    mov [@@ax], 0                   ;[distance/time²]
     mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
     xor ecx, ecx
@@ -637,9 +636,6 @@ PROC bulletPath
         ;ypos += vy*dt
         call updateValue, [@@ypos], [@@vy], [@@dt]
         mov [@@ypos], eax
-        ;vx += ax*dt
-        call updateValue, [@@vx], [@@ax], [@@dt]             ; required for wind later
-        mov [@@vx], eax
         ;vy += ay*dt 
         call updateValue, [@@vy], [@@ay], [@@dt]
         mov [@@vy], eax
@@ -677,8 +673,8 @@ ENDP bulletPath
 
 PROC drawTrajectory
 	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@y2:dword, @@color:dword
-    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
-	USES eax, ebx, ecx, edx
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
+	USES eax, ebx, ecx
 
 
 	mov eax, [@@y2]
@@ -698,11 +694,12 @@ PROC drawTrajectory
     mov [@@vx], eax                 ;[pixels/time]
 	pop eax
     mov [@@vy], eax
-    mov [@@ax], 0                   ;[distance/timeÂ²]
     mov [@@ay], GRAVITY         	;[distance/timeÂ²] downward accelaration due to "gravity" -9.81 = -10 here
 
-
-		mov ecx, 1
+    mov ecx, 4
+    @@drawloop:
+        push ecx
+	    mov ecx, TIMESTEP/16
 		@@tijdsloop:
 			;xpos += vx*dt
 			call updateValue, [@@xpos], [@@vx], [@@dt]
@@ -710,9 +707,6 @@ PROC drawTrajectory
 			;ypos += vy*dt
 			call updateValue, [@@ypos], [@@vy], [@@dt]
 			mov [@@ypos], eax
-			;vx += ax*dt
-			call updateValue, [@@vx], [@@ax], [@@dt]             ; required for wind later
-			mov [@@vx], eax
 			;vy += ay*dt 
 			call updateValue, [@@vy], [@@ay], [@@dt]
 			mov [@@vy], eax
@@ -722,66 +716,13 @@ PROC drawTrajectory
 		mov eax, [@@xpos]
 		mov ebx, [@@ypos]
 		call drawPixel, eax, ebx, [@@color]
-		add eax, 1*FRAQBIT
+        add eax, FRAQBIT
 		call drawPixel, eax, ebx, [@@color]
-		add ebx, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-		sub eax, 1*FRAQBIT
+        sub ebx, FRAQBIT
 		call drawPixel, eax, ebx, [@@color]
 
-		mov ecx, 2
-		@@tijdsloop1:
-			;xpos += vx*dt
-			call updateValue, [@@xpos], [@@vx], [@@dt]
-			mov [@@xpos], eax
-			;ypos += vy*dt
-			call updateValue, [@@ypos], [@@vy], [@@dt]
-			mov [@@ypos], eax
-			;vx += ax*dt
-			call updateValue, [@@vx], [@@ax], [@@dt]             ; required for wind later
-			mov [@@vx], eax
-			;vy += ay*dt 
-			call updateValue, [@@vy], [@@ay], [@@dt]
-			mov [@@vy], eax
-
-			loop @@tijdsloop1
-
-		mov eax, [@@xpos]
-		mov ebx, [@@ypos]
-		call drawPixel, eax, ebx, [@@color]
-		add eax, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-		add ebx, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-		sub eax, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-
-		mov ecx, 3
-		@@tijdsloop2:
-			;xpos += vx*dt
-			call updateValue, [@@xpos], [@@vx], [@@dt]
-			mov [@@xpos], eax
-			;ypos += vy*dt
-			call updateValue, [@@ypos], [@@vy], [@@dt]
-			mov [@@ypos], eax
-			;vx += ax*dt
-			call updateValue, [@@vx], [@@ax], [@@dt]             ; required for wind later
-			mov [@@vx], eax
-			;vy += ay*dt 
-			call updateValue, [@@vy], [@@ay], [@@dt]
-			mov [@@vy], eax
-
-			loop @@tijdsloop2
-
-		mov eax, [@@xpos]
-		mov ebx, [@@ypos]
-		call drawPixel, eax, ebx, [@@color]
-		add eax, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-		add ebx, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-		sub eax, 1*FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
+        pop ecx
+        loop @@drawloop
 
 	ret
 ENDP drawTrajectory
@@ -804,7 +745,6 @@ PROC appendList
     mov ebx, FRAQBIT
     mul ebx
 	push eax
-
 
 	mov eax, [@@arrayptr]			; store pointer in ebx
 	add [dword ptr eax], 3			; add 1 to the actual value of arrlen_mouse for the print procedure later
@@ -856,12 +796,11 @@ PROC getDeltaX
 	mov eax, STARTINGX
 	sub eax, [@@dx]
 
-	;Chech if eax is greater than 0, else put it on 0
-	cmp eax, 0
-	jge @@skip
-	mov eax, 0
+    cmp eax, -3*STARTINGX               ;Waarom 3 ? weet ik ni maar het werkt perfect (probeer 2 en 4 eens ;) )
+    jge @@end
+    mov eax, -3*STARTINGX
 
-	@@skip:
+    @@end:
 	ret
 ENDP getDeltaX
 
@@ -877,6 +816,11 @@ PROC getDeltaY
 	mov eax, STARTINGY
 	sub eax, [@@dy]
 
+    cmp eax, -15*STARTINGY/8
+    jge @@end
+    mov eax, -15*STARTINGY/8
+
+    @@end:
 	ret
 ENDP getDeltaY
 
@@ -1015,11 +959,7 @@ PROC boolean_mouse_dragged
     call drawBullet, STARTINGX, STARTINGY, [@@colorBullet]
 
 	;Throw bullet
-	mov eax ,[@@a]
-	sub eax, STARTINGX
-	mov ebx ,[@@b]
-	sub ebx, STARTINGY
-	call bulletPath, eax, ebx, [@@colorBullet]
+	call bulletPath, [@@a], [@@b], [@@colorBullet]
 
 	@@reset:
 		mov ebx, offset arrlen_mousecoord
