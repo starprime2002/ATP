@@ -15,6 +15,7 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
 INCLUDE "rand.inc"
 INCLUDE "mouse.inc"
+INCLUDE "image.inc"
 
 ; Constants 
 VMEMADR EQU 0A0000h     ; video memory address 
@@ -32,9 +33,12 @@ TARGETWIDTH EQU 4
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
 FRAQBIT EQU 128         ; fractionele bit  
 TIMESTEP EQU 64
-GRAVITY EQU -140*FRAQBIT
+GRAVITY EQU -150*FRAQBIT
 STARTINGX EQU 40*FRAQBIT
 STARTINGY EQU 20*FRAQBIT
+FULLPALLETESIZE EQU 768     ; bytes in palette
+COLORCOUNT EQU 128          ; number of unique colors for palette cycling
+PIXELCOUNT EQU 320*200	    ; pixel count
 
 CODESEG 
 
@@ -356,54 +360,6 @@ PROC updateValue
     ret
 ENDP updateValue
 
-; deletes previous bullet and draws a new one
-PROC moveBullet                             ; input zijn in fractionele bits
-    ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos:dword, @@colorBullet:dword
-    USES ebx, ecx
-
-    ;Delete previous bullet
-    mov ebx, [@@oldXpos]
-    mov ecx, [@@oldYpos]
-
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
-    add ebx, FRAQBIT
-    sub ebx, 2*FRAQBIT
-    sub ecx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
-    sub ebx, 2*FRAQBIT
-    sub ecx, FRAQBIT
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 0
-    call drawPixel, ebx, ecx, 0
-
-    ;Draw new bullet
-    mov ebx, [@@newXpos]
-    mov ecx, [@@newYpos]
-
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 24
-    add ebx, FRAQBIT
-    sub ebx, 2*FRAQBIT
-    sub ecx, FRAQBIT
-    call drawPixel, ebx, ecx, 24
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, [@@colorBullet]
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 24
-    sub ebx, 2*FRAQBIT
-    sub ecx, FRAQBIT
-    add ebx, FRAQBIT
-    call drawPixel, ebx, ecx, 24
-    add ebx, FRAQBIT
-
-    ret
-ENDP moveBullet
-
 PROC deleteBullet                             ; input zijn in fractionele bits
     ARG @@Xpos:dword, @@Ypos:dword
     USES eax, ebx
@@ -534,12 +490,14 @@ ENDP checkCollision
 
 ; To replace bulllet once collided
 PROC replaceBullet
-    ARG @@collisionType:byte, @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
+    ARG @@collisionType:dword, @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
     LOCAL @@waittime:dword
     USES ecx
 
     mov [@@waittime], 50
     call deleteBullet, [@@Xpos], [@@Ypos]
+
+    mov ecx, [@@collisionType]
 
     cmp ecx, 1
     je @@groundCase
@@ -640,7 +598,6 @@ PROC bulletPath
         call updateValue, [@@vy], [@@ay], [@@dt]
         mov [@@vy], eax
 
-        ;call checkCollision2, [@@xpos], [@@ypos]
         call checkCollision, [@@xpos], [@@ypos]
         cmp ecx, 0
         jne @@endPath
@@ -795,10 +752,6 @@ PROC getDeltaX
 
 	mov eax, STARTINGX
 	sub eax, [@@dx]
-
-    cmp eax, -3*STARTINGX               ;Waarom 3 ? weet ik ni maar het werkt perfect (probeer 2 en 4 eens ;) )
-    jge @@end
-    mov eax, -3*STARTINGX
 
     @@end:
 	ret
@@ -985,7 +938,8 @@ PROC main
     call    fillBackground
 
 	call 	mouse_install, offset boolean_mouse_dragged
-
+    call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
+    call    processFile, offset image_file
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
     call    terminateProcess
 
@@ -1004,10 +958,20 @@ DATASEG
                     dd 31, 63, 0                            ;grass
                     dd 53, 26, 8                            ;wall
                     dd 55, 5, 15                            ;target
-                    dd 63, 63, 40                           ;Aimline
+                    dd 127, 63, 40                           ;Aimline
                     dd 32, 32, 32                           ;Bullet
-
+	image_file db "winscr.bin", 0
+	image_fill db "win.bin", 0
+	openErrorMsg db "could not open file", 13, 10, '$'
+	readErrorMsg db "could not read data", 13, 10, '$'
+	closeErrorMsg db "error during file closing", 13, 10, '$'
     arrlen_mousecoord dd 0
+    
+; -------------------------------------------------------------------
+UDATASEG
+	imagedata db PIXELCOUNT dup (?)
+; -------------------------------------------------------------------
+
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
