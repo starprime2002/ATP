@@ -434,7 +434,6 @@ PROC checkCollision                                     ;te optimisere
         call getColor, ebx, edx
         cmp eax, 3
         jne @@wallCheck
-        call printSignedInteger, eax
         mov ecx, 2
         jmp @@collisionEnd
 
@@ -628,30 +627,96 @@ PROC bulletPath
     ret 
 ENDP bulletPath 
 
+;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
+PROC drawCube                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword
+    USES eax, ebx, ecx
+
+    mov ebx, [@@xcoord]
+    mov ecx, [@@ycoord]
+
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@next1
+	call drawPixel, ebx, ecx, 4
+
+    @@next1:
+    add ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@next2
+	call drawPixel, ebx, ecx, 4
+    
+    @@next2:
+    sub ecx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@next3
+	call drawPixel, ebx, ecx, 4
+    
+    @@next3:
+    sub ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@end
+	call drawPixel, ebx, ecx, 4
+
+    @@end:
+    ret
+ENDP drawCube
+
+PROC deleteCube                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword
+    USES eax, ebx, ecx
+
+    mov ebx, [@@xcoord]
+    mov ecx, [@@ycoord]
+
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@next1
+	call drawPixel, ebx, ecx, 0
+
+    @@next1:
+    add ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@next2
+	call drawPixel, ebx, ecx, 0
+    
+    @@next2:
+    sub ecx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@next3
+	call drawPixel, ebx, ecx, 0
+    
+    @@next3:
+    sub ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@end
+	call drawPixel, ebx, ecx, 0
+
+    @@end:
+    ret
+ENDP deleteCube
+
 PROC drawTrajectory
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@y2:dword, @@color:dword
+	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
     LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
 	USES eax, ebx, ecx
 
-
-	mov eax, [@@y2]
-	mov ebx, [@@y1]
-	sub eax, ebx
-	push eax
-	mov eax, [@@x2]
-	mov ebx, [@@x1]
-	sub eax, ebx
-	push eax
+	mov eax, [@@dx]
+	mov ebx, [@@dy]
 
     mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
 	;Startingposition
-    mov [@@xpos], STARTINGX        ;[distance unit] 
-    mov [@@ypos], STARTINGY        ;[distance unit]
-	pop eax
+    mov [@@xpos], STARTINGX         ;[distance unit] 
+    mov [@@ypos], STARTINGY         ;[distance unit]
     mov [@@vx], eax                 ;[pixels/time]
-	pop eax
-    mov [@@vy], eax
-    mov [@@ay], GRAVITY         	;[distance/timeÂ²] downward accelaration due to "gravity" -9.81 = -10 here
+    mov [@@vy], ebx
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
     mov ecx, 4
     @@drawloop:
@@ -672,17 +737,56 @@ PROC drawTrajectory
 
 		mov eax, [@@xpos]
 		mov ebx, [@@ypos]
-		call drawPixel, eax, ebx, [@@color]
-        add eax, FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
-        sub ebx, FRAQBIT
-		call drawPixel, eax, ebx, [@@color]
+        call drawCube, eax, ebx
 
         pop ecx
         loop @@drawloop
 
-	ret
+    ret
 ENDP drawTrajectory
+
+PROC deleteTrajectory
+	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
+	USES eax, ebx, ecx
+
+	mov eax, [@@dx]
+	mov ebx, [@@dy]
+
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
+	;Startingposition
+    mov [@@xpos], STARTINGX         ;[distance unit] 
+    mov [@@ypos], STARTINGY         ;[distance unit]
+    mov [@@vx], eax                 ;[pixels/time]
+    mov [@@vy], ebx
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
+
+    mov ecx, 4
+    @@drawloop:
+        push ecx
+	    mov ecx, TIMESTEP/16
+		@@tijdsloop:
+			;xpos += vx*dt
+			call updateValue, [@@xpos], [@@vx], [@@dt]
+			mov [@@xpos], eax
+			;ypos += vy*dt
+			call updateValue, [@@ypos], [@@vy], [@@dt]
+			mov [@@ypos], eax
+			;vy += ay*dt 
+			call updateValue, [@@vy], [@@ay], [@@dt]
+			mov [@@vy], eax
+
+			loop @@tijdsloop
+
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+        call deleteCube, eax, ebx
+
+        pop ecx
+        loop @@drawloop
+
+    ret
+ENDP deleteTrajectory
 
 PROC appendList
 	ARG @@arrayptr:dword, @@newB:dword, @@newX:dword, @@newY:dword
@@ -740,15 +844,15 @@ ENDP getOfList
 
 PROC getDeltaX
 	ARG @@x1:dword, @@x2:dword RETURNS eax
-	LOCAL @@dx: dword
 	
 	;dx = x2 - x1
 	mov eax, [@@x2]
 	sub eax, [@@x1]
-	mov [@@dx], eax
+	neg eax
 
-	mov eax, STARTINGX
-	sub eax, [@@dx]
+    cmp eax, -STARTINGX
+    jge @@end
+    mov eax, -STARTINGX
 
     @@end:
 	ret
@@ -756,21 +860,12 @@ ENDP getDeltaX
 
 PROC getDeltaY
 	ARG @@y1:dword, @@y2:dword RETURNS eax
-	LOCAL @@dy: dword
 
 	;dy = y2 - y1
 	mov eax, [@@y2]
 	sub eax, [@@y1]
-	mov [@@dy], eax
+	neg eax
 
-	mov eax, STARTINGY
-	sub eax, [@@dy]
-
-    cmp eax, -15*STARTINGY/8
-    jge @@end
-    mov eax, -15*STARTINGY/8
-
-    @@end:
 	ret
 ENDP getDeltaY
 
@@ -795,131 +890,89 @@ PROC moveElementsOfList
 	ret
 ENDP moveElementsOfList
 
-PROC boolean_mouse_dragged
+PROC mouseAim
 	USES eax, ebx, ecx, edx
-	LOCAL @@result: dword, @@boolean1:dword, @@x1: dword, @@y1: dword, @@boolean2: dword, @@x2: dword, @@y2: dword, @@oldBoolean: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword, @@colorBullet:dword
-
-	;Put initially result on 0
-	mov [@@result], 0
+	LOCAL @@x1: dword, @@y1: dword, @@oldx2: dword, @@oldy2: dword, @@b2: dword, @@x2: dword, @@y2: dword, @@dx:dword, @@dy:dword
 
 	;Show mouse pointer
 	mov ax, 1
 	int 33h
 
+	mov eax, offset arrlen_mousecoord
+	cmp [dword ptr eax], 0
+	jne @@start
+    cmp bl, 1
+    jne @@return
 
-	movzx ebx, bl
-	movzx ecx, cx
-   	movzx edx, dx
+    @@start:
+        ;We will make a list containing boolean, xcoord and ycoord: 
+        ;   [boolean1, x1, y1, oldboolean2, oldx2, oldy2, boolean2, x2, y2]
+        movzx ebx, bl	                        ; mouse clickstate (1 or 0)
+        movzx ecx, cx                           ; horizontal cursor position
+        movzx edx, dx                           ; vertical cursor position
+        call appendList, offset arrlen_mousecoord, ebx, ecx, edx
 
-	call appendList, offset arrlen_mousecoord, ebx, ecx, edx
+        ;First check if it's an array of 12 elements
+        mov ecx, offset arrlen_mousecoord
+        ;call printSignedInteger, [dword ptr ecx]
+        cmp [dword ptr ecx], 12
+        jne @@return
 
+        call moveElementsOfList, offset arrlen_mousecoord
 
-	;First check if it's an array of 12 elements
-	; if arrlen_mousecoord >=3:
-	mov ecx, [offset arrlen_mousecoord]
-	cmp ecx, 12
-	jl @@skipit
-	call moveElementsOfList, offset arrlen_mousecoord
-	;call printIntList, offset arrlen_mousecoord	
+        ;Get elements of list
+        call getOfList, offset arrlen_mousecoord, 2
+        mov [@@x1], eax
+        call getOfList, offset arrlen_mousecoord, 3
+        mov [@@y1], eax
+        call getOfList, offset arrlen_mousecoord, 5
+        mov [@@oldx2], eax
+        call getOfList, offset arrlen_mousecoord, 6
+        mov [@@oldy2], eax
+        call getOfList, offset arrlen_mousecoord, 7
+        mov [@@b2], eax
+        call getOfList, offset arrlen_mousecoord, 8
+        mov [@@x2], eax
+        call getOfList, offset arrlen_mousecoord, 9
+        mov [@@y2], eax
 
-	;Get first boolean
-	call getOfList, offset arrlen_mousecoord, 1
-	mov [@@boolean1], eax
+        ;Draw a pixel on the place where the mouse has first clicked
+        call drawPixel, [@@x1], [@@y1], 200
 
-	;Get old boolean
-	call getOfList, offset arrlen_mousecoord, 4
-	mov [@@oldBoolean], eax
+        ;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
+        call getDeltaX, [@@x1], [@@oldx2]
+        mov [@@dx], eax
+        call getDeltaY, [@@y1], [@@oldy2]
+        mov [@@dy], eax
+        call deleteTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
 
-	;Get new boolean
-	call getOfList, offset arrlen_mousecoord, 7
-	mov [@@boolean2], eax
+        call getDeltaX, [@@x1], [@@x2]
+        mov [@@dx], eax
+        call getDeltaY, [@@y1], [@@y2]
+        mov [@@dy], eax
+        call drawTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
 
-	;Get x1
-	call getOfList, offset arrlen_mousecoord, 2
-	mov [@@x1], eax
-	
-	;Get y1
-	call getOfList, offset arrlen_mousecoord, 3
-	mov [@@y1], eax
+        ;The state where the mouse is released: [boolean2 back to 0]
+        cmp [@@b2], 1
+        je @@return
 
-	;Get x2
-	call getOfList, offset arrlen_mousecoord, 8
-	mov [@@x2], eax
+        @@throw:
+            ;Hide visible mouse pointer
+            mov ax, 2
+            int 33h 
 
-	;Get y2
-	call getOfList, offset arrlen_mousecoord, 9
-	mov [@@y2], eax
+            ;Hide trajectoryline + hide startpoint 
+            call deleteTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
+            call drawPixel, [@@x1], [@@y1], 0
 
-	;Get oldXpos
-	call getOfList, offset arrlen_mousecoord, 5
-	mov [@@oldXpos], eax
+            ;Throw bullet
+            call bulletPath, [@@dx], [@@dy], 9
 
-	;Get oldYpos
-	call getOfList, offset arrlen_mousecoord, 6
-	mov [@@oldYpos], eax
-
-	;if boolean1 is 1 do this
-	cmp [@@boolean1], 1
-	jne @@reset
-
-	;Draw a pixel on the place where the mouse has first clicked
-	call drawPixel, [@@x1], [@@y1], 70
-
-	;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
-	call getDeltaX, [@@x1], [@@oldXpos]
-	mov [@@a], eax
-
-	call getDeltaY, [@@y1], [@@oldYpos]
-	mov [@@b], eax
-
-	call drawTrajectory, STARTINGX, STARTINGY, [@@a], [@@b], 0
-
-
-	call getDeltaX, [@@x1], [@@x2]
-	mov [@@a], eax
-	call getDeltaY, [@@y1], [@@y2]
-	mov [@@b], eax
-
-
-	call drawTrajectory, STARTINGX, STARTINGY, [@@a], [@@b], 4
-
-	;The state where the mouse is let go is: [oldBoolean = 1 and boolean2 = 0]
-	cmp [@@oldBoolean], 1
-	jne @@skipit
-	cmp [@@boolean2], 0
-	jne @@skipit
-	mov [@@result], 1
-
-	@@skipit:
-
-	cmp [@@result], 1
-	jne @@return
-
-	;Hide visible mouse pointer
-	mov ax, 2
-	int 33h 
-
-	;Hide trajectoryline + hide startpoint 
-	call drawTrajectory, STARTINGX, STARTINGY, [@@a], [@@b], 0
-
-    ;Color bullet
-    call rand_init
-    call rand
-    mov [@@colorBullet], eax
-    call drawBullet, STARTINGX, STARTINGY, [@@colorBullet]
-
-	;Throw bullet
-	call bulletPath, [@@a], [@@b], [@@colorBullet]
-
-	@@reset:
-		mov ebx, offset arrlen_mousecoord
-		mov [dword ptr ebx], 0
+            mov ebx, offset arrlen_mousecoord
+            mov [dword ptr ebx], 0
 	@@return:
-
 	ret
-
-	
-ENDP boolean_mouse_dragged
+ENDP mouseAim
 
 PROC main
     sti
@@ -929,15 +982,13 @@ PROC main
     pop es
 
     call    setVideoMode, 13h
-    finit   ; initialize FPU
 
     call    updateColorpallete, 6
     call    fillBackground, offset image_file
 
-	call 	mouse_install, offset boolean_mouse_dragged
+	call 	mouse_install, offset mouseAim
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
-    call    processFile
-    call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
+    ;MOET ge ni als ge klaar zijt ook de mouse uninstall??? er is een functie daarvoor in MOUSE.ASM
     call    terminateProcess
 
 ENDP main 
@@ -962,7 +1013,7 @@ DATASEG
 	readErrorMsg db "could not read data", 13, 10, '$'
 	closeErrorMsg db "error during file closing", 13, 10, '$'
     arrlen_mousecoord dd 0
-    
+    arrMousecoord dw 9 dup (?)
 ; -------------------------------------------------------------------
 UDATASEG
 	imagedata db PIXELCOUNT dup (?)
