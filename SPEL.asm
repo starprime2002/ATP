@@ -33,9 +33,11 @@ TARGETWIDTH EQU 4
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
 FRAQBIT EQU 128         ; fractionele bit  
 TIMESTEP EQU 64
-GRAVITY EQU -150*FRAQBIT
+GRAVITY EQU -200*FRAQBIT
 STARTINGX EQU 40*FRAQBIT
 STARTINGY EQU 20*FRAQBIT
+XCONV EQU 2                ;converts de dx to vstart_x     (vx = x*XCONV)
+YCONV EQU 2                 ;converts de dy to vstart_y     (vy = x*YCONV)
 FULLPALLETESIZE EQU 768     ; bytes in palette
 COLORCOUNT EQU 128          ; number of unique colors for palette cycling
 PIXELCOUNT EQU 320*200	    ; pixel count
@@ -407,6 +409,16 @@ PROC drawBullet                             ; input zijn in fractionele bits
     ret
 ENDP drawBullet
 
+PROC bullet_init
+    USES eax
+
+    call rand_init
+    call rand
+    call drawBullet, STARTINGX, STARTINGY, eax
+    
+    ret
+ENDP bullet_init
+
 ; Checks    if the bullet collided with wall or ground
 ;           if the bullet is out of border
 PROC checkCollision                                     ;te optimisere
@@ -513,64 +525,68 @@ PROC replaceBullet
     cmp ecx, 7
     je @@rightLimitCase
 
+    ; Hé Alec lees dit aub: dus ge zit kheb hier een paar deletebullets gecomment omda het misschien beter is om
+    ; de gemiste bullet te laten zoda de missers ziet en de random kleure extra aandacht krijge
+    ; als je de ";" weg haalt gaat er nx kapot (normaal gezien (¬‿¬ ))
+
     @@groundCase:
         call drawBullet, [@@Xpos], 1*FRAQBIT, [@@colorBullet]
         call printString, offset msgGround
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, [@@Xpos], 1*FRAQBIT
+        ;call deleteBullet, [@@Xpos], 1*FRAQBIT
         jmp @@endReplacement
         
     @@targetCase:
         call drawBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
         call printString, offset msgSucces
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
+        ;call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
 
     @@wallCase:
         call drawBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
         call printString, offset msgWall
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos]
+        ;call deleteBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
         
     @@onTheWallCase:
         call drawBullet, [@@Xpos], (149-WALLVERPOS+2)*FRAQBIT, [@@colorBullet]    
         call printString, offset msgWall
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, [@@Xpos], 101*FRAQBIT
+        ;call deleteBullet, [@@Xpos], 101*FRAQBIT
         jmp @@endReplacement
 
     @@upperLimitCase:
         call drawBullet, [@@Xpos], 148*FRAQBIT, [@@colorBullet]
         call printString, offset msgTooHigh
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, [@@Xpos], 148*FRAQBIT
+        ;call deleteBullet, [@@Xpos], 148*FRAQBIT
         jmp @@endReplacement
     
     @@leftLimitCase:
         call drawBullet, 1*FRAQBIT, [@@Ypos], [@@colorBullet]
         call printString, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, 1*FRAQBIT, [@@Ypos]
+        ;call deleteBullet, 1*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
 
     @@rightLimitCase:
         call drawBullet, 318*FRAQBIT, [@@Ypos], [@@colorBullet]
         call printString, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
-        call deleteBullet, 318*FRAQBIT, [@@Ypos]
+        ;call deleteBullet, 318*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
 
     @@endReplacement:
-        call drawBullet, STARTINGX, STARTINGY, [@@colorBullet]
+        call bullet_init
 
     ret
 ENDP replaceBullet
 
 ;Initialize a throw
 PROC bulletPath
-    ARG @@vxbegin:dword, @@vybegin:dword, @@colorBullet:dword
+    ARG @@vx_0:dword, @@vy_0:dword, @@colorBullet:dword
     LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
     USES eax, ebx, ecx, edx
 
@@ -578,11 +594,17 @@ PROC bulletPath
 	;Startingposition
     mov [@@xpos], STARTINGX        ;[distance unit] 
     mov [@@ypos], STARTINGY        ;[distance unit]
-    mov eax, [@@vxbegin]            ;[distance/time]
+    mov eax, [@@vx_0]            ;[distance/time]
     mov [@@vx], eax                 ;[pixels/time]
-    mov eax, [@@vybegin]            ;[distance/time]
+    mov eax, [@@vy_0]            ;[distance/time]
     mov [@@vy], eax
     mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
+
+    ;Nodig om voor later
+    mov eax, [@@xpos]
+    mov ebx, [@@ypos]
+    push eax
+    push ebx
 
     xor ecx, ecx
     @@tijdsloop: 
@@ -844,11 +866,16 @@ ENDP getOfList
 
 PROC getDeltaX
 	ARG @@x1:dword, @@x2:dword RETURNS eax
+    USES ebx, edx
 	
 	;dx = x2 - x1
 	mov eax, [@@x2]
 	sub eax, [@@x1]
 	neg eax
+
+    mov ebx, XCONV
+    imul ebx
+
 
     cmp eax, -STARTINGX
     jge @@end
@@ -860,11 +887,15 @@ ENDP getDeltaX
 
 PROC getDeltaY
 	ARG @@y1:dword, @@y2:dword RETURNS eax
+    USES ebx, edx
 
 	;dy = y2 - y1
 	mov eax, [@@y2]
 	sub eax, [@@y1]
 	neg eax
+
+    mov ebx, YCONV
+    imul ebx
 
 	ret
 ENDP getDeltaY
@@ -892,7 +923,7 @@ ENDP moveElementsOfList
 
 PROC mouseAim
 	USES eax, ebx, ecx, edx
-	LOCAL @@x1: dword, @@y1: dword, @@oldx2: dword, @@oldy2: dword, @@b2: dword, @@x2: dword, @@y2: dword, @@dx:dword, @@dy:dword
+	LOCAL @@x1: dword, @@y1: dword, @@oldx2: dword, @@oldy2: dword, @@b2: dword, @@x2: dword, @@y2: dword, @@dx:dword, @@dy:dword, @@colorBullet:dword
 
 	;Show mouse pointer
 	mov ax, 1
@@ -965,8 +996,12 @@ PROC mouseAim
             call deleteTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
             call drawPixel, [@@x1], [@@y1], 0
 
+            ;get color of bullet
+            call getColor, STARTINGX, STARTINGY
+            mov [@@colorBullet], eax
+
             ;Throw bullet
-            call bulletPath, [@@dx], [@@dy], 9
+            call bulletPath, [@@dx], [@@dy], eax
 
             mov ebx, offset arrlen_mousecoord
             mov [dword ptr ebx], 0
@@ -985,6 +1020,7 @@ PROC main
 
     call    updateColorpallete, 6
     call    fillBackground, offset image_file
+    call    bullet_init
 
 	call 	mouse_install, offset mouseAim
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
