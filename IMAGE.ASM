@@ -15,6 +15,8 @@ P386
 MODEL FLAT, C
 ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
+INCLUDE "image.inc"
+
 ; compile-time constants (with macros)
 VMEMADR EQU 0A0000h	; video memory address
 FULLPALLETESIZE EQU 768 ; bytes in palette
@@ -58,7 +60,6 @@ ENDP terminateAfterKeystroke
 ; 	* Nbytes: number of bytes that should be updated for palette
 ; 	* Firstcolor: internal palette offset
 PROC updateColourPalette
-;	call updateColourPalette, offset palette, FULLPALLETESIZE, 0
 	ARG	 	@@Psource:dword, @@Nbytes: dword, @@Firstcolor:byte
 	USES 	eax, ecx, edx, esi
 
@@ -135,31 +136,7 @@ PROC processFile
 ENDP processFile
 
 
-
-; -------------------------------------------------------------------
-
-PROC main
-	sti
-	cld
-	
-	push ds
-	pop	es
-	
-	call setVideoMode, 13h
-	
-	; read and apply image data
-
-	call processFile, offset image_file
-	waitForKeystroke
-	call terminateProcess
-
-ENDP main
-
-; -------------------------------------------------------------------
 DATASEG
-				
-	image_file db "winscr.bin", 0
-	image_fill db "win.bin", 0
 	openErrorMsg db "could not open file", 13, 10, '$'
 	readErrorMsg db "could not read data", 13, 10, '$'
 	closeErrorMsg db "error during file closing", 13, 10, '$'
@@ -171,4 +148,4 @@ UDATASEG
 ; -------------------------------------------------------------------
 STACK 100h
 
-END main
+END

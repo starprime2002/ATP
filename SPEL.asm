@@ -723,9 +723,6 @@ PROC appendList
 	ret
 ENDP appendList
 
-;---------------------------------------------------------
-;This is for boolean_mouse_dragged
-
 PROC getOfList
 	ARG @@arrayptr:dword, @@index:dword RETURNS eax
 	USES ebx
@@ -935,11 +932,11 @@ PROC main
     finit   ; initialize FPU
 
     call    updateColorpallete, 6
-    call    fillBackground
+    call    fillBackground, offset image_file
 
 	call 	mouse_install, offset boolean_mouse_dragged
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
-    call    processFile, offset image_file
+    call    processFile
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
     call    terminateProcess
 
@@ -961,7 +958,6 @@ DATASEG
                     dd 127, 63, 40                           ;Aimline
                     dd 32, 32, 32                           ;Bullet
 	image_file db "winscr.bin", 0
-	image_fill db "win.bin", 0
 	openErrorMsg db "could not open file", 13, 10, '$'
 	readErrorMsg db "could not read data", 13, 10, '$'
 	closeErrorMsg db "error during file closing", 13, 10, '$'
