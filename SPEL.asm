@@ -1,666 +1,71 @@
-; -------------------------------------------------------------------
-; 80386
-; 32-bit x86 assembly language
-; TASM
-;
-; author:	Stijn Bettens, David Blinder
-; date:		25/09/2017
-; program:	Hello World!
-; -------------------------------------------------------------------
+; ------------------------------------------------------------------- 
+; 80386 
+; 32-bit x86 assembly language 
+; TASM 
+; 
+; author:   Stijn Bettens, David Blinder 
+; date:     25/09/2017 
+; program:  Hello World! 
+; ------------------------------------------------------------------- 
 
-IDEAL
-P386
-MODEL FLAT, C
-ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
+IDEAL 
+P386 
+MODEL FLAT, C 
+ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT 
 
+INCLUDE "rand.inc"
 INCLUDE "mouse.inc"
+INCLUDE "image.inc"
 
-; Screen constants
-VMEMADR EQU 0A0000h	; video memory address
-SCRWIDTH EQU 320	; screen witdth
-SCRHEIGHT EQU 200	; screen height
+; Constants 
+VMEMADR EQU 0A0000h     ; video memory address 
+SCRWIDTH EQU 320        ; screen witdth 
+SCRHEIGHT EQU 200       ; screen height
+SKYHEIGHT EQU 150
+WALLVERPOS EQU 50
+WALLHORPOS EQU 300
+WALLHEIGHT EQU 100
+WALLWIDTH EQU 12
+TARGETVERPOS EQU 80
+TARGETHORPOS EQU 298
+TARGETHEIGHT EQU 10
+TARGETWIDTH EQU 4
+ALLONES EQU 4294967295  ; needed for sign extension before dividing 
+FRAQBIT EQU 128         ; fractionele bit  
+TIMESTEP EQU 64
+GRAVITY EQU -200*FRAQBIT
+STARTINGX EQU 40*FRAQBIT
+STARTINGY EQU 20*FRAQBIT
+XCONV EQU 1                 ;converts de dx to vstart_x     (vx = x*XCONV)
+YCONV EQU 1                 ;converts de dy to vstart_y     (vy = x*YCONV)
 
+;--------------------------------------------------------------------------------------------------------
+CODESEG 
 
-; -------------------------------------------------------------------
-; CODE
-; -------------------------------------------------------------------
-CODESEG
+; Set the video mode 
+PROC setVideoMode 
+    ARG     @@VM:byte 
+    USES    eax 
 
-; Set the video mode
-PROC setVideoMode
-	ARG 	@@VM:byte
-	USES 	eax
+    movzx ax,[@@VM] 
+    int 10h 
 
-	movzx ax,[@@VM]
-	int 10h
+    ret 
+ENDP setVideoMode 
 
-	ret
-ENDP setVideoMode
+; Wait for a specific keystroke. 
+PROC waitForSpecificKeystroke 
+    ARG     @@key:byte 
+    USES    eax 
 
-; Wait for a specific keystroke.
-PROC waitForSpecificKeystroke
-	ARG 	@@key:byte
-	USES 	eax
+    @@waitForKeystroke: 
+        mov ah,00h 
+        int 16h 
+        cmp al,[@@key] 
+    jne @@waitForKeystroke ;if the key u pressed is not @@key (hier ESC= 001Bh), dan zal het niet terminateProcess
 
-	@@waitForKeystroke:
-		mov	ah,00h
-		int	16h
-		cmp	al,[@@key]
-	jne	@@waitForKeystroke ; if the key u pressed is not @@key (hier ESC= 001Bh), dan zal het niet terminateProcess
-
-	ret
+    ret 
 ENDP waitForSpecificKeystroke
-
-
-; Terminate the program.
-PROC terminateProcess
-	USES eax
-	call setVideoMode, 03h
-	mov	ax,04C00h
-	int 21h
-	ret
-ENDP terminateProcess
-
-; Procedure wait_VBLANK van EXAMPLES\DANCER genomen
-; wait for @@framecount frames
-PROC wait_VBLANK
-	ARG @@framecount: word
-	USES eax, ecx, edx
-	mov dx, 03dah 					; Wait for screen refresh
-	movzx ecx, [@@framecount]
-	
-		@@VBlank_phase1:
-		in al, dx 
-		and al, 8
-		jnz @@VBlank_phase1
-		@@VBlank_phase2:
-		in al, dx 
-		and al, 8
-		jz @@VBlank_phase2
-	loop @@VBlank_phase1
-	
-	ret 
-ENDP wait_VBLANK
-
-PROC updateColorpallete
-
-	USES eax, ebx, ecx, edx
-
-	mov ebx, offset palette
-
-	mov ah, 0
-
-	@@kleur:
-		mov DX, 03C8h 						; DAC write port
-		push eax
-		mov al, ah
-		out DX, Al 							; write to IO
-		pop eax
-
-
-		mov DX, 03C9h 						; DAC data port
-
-		mov AL, [ebx] 						; load red value (6-bit)
-		out DX, AL 							; write red value
-		add ebx, 4
-		mov AL, [ebx] 						; load green value (6-bit)
-		out DX, AL 							; write green value
-		add ebx, 4
-		mov AL, [ebx] 						; load blue value (6-bit)
-		out DX, AL 							; write blue value
-		add ebx, 4
-		
-		inc ah
-		cmp ah, 5
-		jne @@kleur
-
-	ret
-ENDP updateColorpallete
-
-; Fill the background (for mode 13h): blue sky with grass and a wall
-PROC fillBackground
-	USES 	eax, ecx, edi, edx, ebx
-
-	; Initialize video memory address.
-	mov	edi, VMEMADR 						; edi is destination adress en is dus hier 0A0000h
-
-
-	; Draw sky
-	mov	ecx, SCRWIDTH*150 					; ecx = amount of elements = aantal pixels
-	mov	al, 0								; indx of the first color to change
-	rep	stosb			; stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
-						;stosw (word) = transfer two byte (= word)
-						;stosd (double word) = tranfer 4 bytes (= double word)
-
-	; Draw grass
-	mov	edi, VMEMADR
-	add edi, 150*320
-	mov al, 1
-
-	mov edx, 50
-	@@hoogte:
-		mov ecx, 320
-		@@breedte:
-			mov [edi], al
-			inc edi
-			dec ecx
-			cmp ecx, 0
-			jne @@breedte
-		dec edx
-		cmp edx, 0
-		jne @@hoogte
-
-	; Draw wall
-	mov edx, 1
-	@@hoogtemuur:
-		xor ebx, ebx	
-		mov ebx, 50
-		add ebx, edx
-		mov eax, 320
-		push edx
-		mul ebx
-		pop edx
-		mov ebx, eax
-		add ebx, 300
-		mov	edi, VMEMADR
-		add edi, ebx
-		mov al, 2
-		mov ecx, 10
-			@@breedtemuur:
-				mov [edi], al
-				inc edi
-				dec ecx
-				cmp ecx, 0
-				jne @@breedtemuur
-		inc edx
-		cmp edx, 100
-		jne @@hoogtemuur
-
-	; Draw target
-	mov edx, 1
-	@@hoogtedoel:
-		xor ebx, ebx	
-		mov ebx, 100
-		add ebx, edx
-		mov eax, 320
-		push edx
-		mul ebx
-		pop edx
-		mov ebx, eax
-		add ebx, 298
-		mov	edi, VMEMADR
-		add edi, ebx
-		mov al, 3
-		mov ecx, 2
-			@@breedtedoel:
-				mov [edi], al
-				inc edi
-				dec ecx
-				cmp ecx, 0
-				jne @@breedtedoel
-		inc edx
-		cmp edx, 10
-		jne @@hoogtedoel
-	ret
-ENDP fillBackground
-
-;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
-PROC drawPixel
-	ARG @@xcoord:dword ,@@ycoord:dword, @@color:byte
-	USES eax, ebx
-
-	mov	edi, VMEMADR
-	mov eax, [@@ycoord]
-	mov ebx, 149
-	sub ebx, eax
-	mov eax, 320
-	imul ebx
-	add edi, eax
-	add edi, [@@xcoord]
-	
-	mov al, [@@color]						; pick the color of the pallet
-	mov [edi], al
-
-	ret
-ENDP drawPixel
-
-; deletes previous bullet and draws a new one
-PROC moveBullet
-	ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos:dword
-	USES ebx, ecx
-
-
-	;Delete previous bullet
-	mov ebx, [@@oldXpos]
-	mov ecx, [@@oldYpos]
-
-	call drawPixel, ebx, ecx, 0
-	inc ebx
-	call drawPixel, ebx, ecx, 0
-	inc ebx
-	call drawPixel, ebx, ecx, 0
-	sub ebx, 2
-	dec ecx
-	call drawPixel, ebx, ecx, 0
-	inc ebx
-	call drawPixel, ebx, ecx, 0
-	inc ebx
-	call drawPixel, ebx, ecx, 0
-	sub ebx, 2
-	dec ecx
-	call drawPixel, ebx, ecx, 0
-	inc ebx
-	call drawPixel, ebx, ecx, 0
-	inc ebx
-	call drawPixel, ebx, ecx, 0
-
-
-	;Draw new bullet
-	mov ebx, [@@newXpos]
-	mov ecx, [@@newYpos]
-
-	call drawPixel, ebx, ecx, 4
-	inc ebx
-	call drawPixel, ebx, ecx, 4
-	inc ebx
-	call drawPixel, ebx, ecx, 4
-	sub ebx, 2
-	dec ecx
-	call drawPixel, ebx, ecx, 4
-	inc ebx
-	call drawPixel, ebx, ecx, 3
-	inc ebx
-	call drawPixel, ebx, ecx, 4
-	sub ebx, 2
-	dec ecx
-	call drawPixel, ebx, ecx, 4
-	inc ebx
-	call drawPixel, ebx, ecx, 4
-	inc ebx
-	call drawPixel, ebx, ecx, 4
-
-	ret
-ENDP moveBullet
-
-;procedure om de baan te berekenen
-PROC bulletPath
-	ARG @@vxbegin:dword, @@vybegin:dword
-	LOCAL @@tijd:dword, @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
-	USES eax, ebx
-
-	mov [@@tijd], 0
-	mov [@@dt], 1					; [time unit]
-
-	mov eax, 25
-	mov ebx, 25
-
-	push eax
-	push ebx
-
-	mov [@@xpos], eax				;[pixels]
-	mov [@@ypos], ebx				;[pixels]
-	mov eax, [@@vxbegin]			;[pixels/time unit]
-	mov [@@vx], eax
-	mov eax, [@@vybegin]			;[pixels/time unit]
-	mov [@@vy], eax
-	mov [@@ax], 0					;[pixels/time unit²]
-	mov [@@ay], -10					;[pixels/time unit²] downward accelaration due to "gravity"
-
-
-	call moveBullet, [@@xpos], [@@ypos], [@@xpos], [@@ypos] 
-	;call	waitForSpecificKeystroke, 001Bh
-
-	@@tijdsloop:
-		mov eax, [@@dt]
-		add [@@tijd], eax
-
-		;vx += ax*dt
-		mov eax, [@@ax]				; ik weet dat ax toch nul is maar in toekomst zal ook windkracht komen
-		mov ebx, [@@dt]				; ik weet ook dat dt toch 1 is (maar zou kunne veranderen) 
-		mul ebx
-		add [@@vx], eax
-		;vy += ay*dt
-		mov eax, [@@ay]
-		mov ebx, [@@dt]
-		mul ebx
-		add [@@vy], eax
-		;xpos += vx*dt 
-		mov eax, [@@vx]
-		mov ebx, [@@dt]
-		mul ebx
-		add [@@xpos], eax
-		;ypos += vy*dt
-		mov eax, [@@vy]
-		mov ebx, [@@dt]
-		imul ebx
-		add [@@ypos], eax
-		
-		;Bring back old coordinations
-		pop ebx						
-		pop eax
-
-		;bring back old coordinations
-		call moveBullet, eax, ebx, [@@xpos], [@@ypos] 
-
-		mov eax, [@@xpos]
-		mov ebx, [@@ypos]
-		
-		;Store new coordinations for next loop
-		push eax
-		push ebx
-
-		;Checks wall collision
-		cmp eax, 297							; (hou rekening met breedte kogel)
-		jge @@endWall
-		
-		;Checks ground collision
-		cmp ebx, 3								; (hou rekening met hoogte kogel)								
-		jle @@endGround
-
-		call wait_VBLANK, 15					; [*10ms] animation purposes
-
-		jmp @@tijdsloop
-
-	@@endWall:
-			call moveBullet, eax, ebx, 297, ebx
-			jmp @@end
-	@@endGround:
-			call moveBullet, eax, ebx, eax, 2
-
-	@@end:
-	ret
-ENDP bulletPath
-
-
-PROC drawbulletPath
-	ARG @@vxbegin:dword, @@vybegin:dword, @@color: dword
-	LOCAL @@tijd:dword, @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ax:dword, @@ay:dword
-	USES eax, ebx
-
-	mov [@@tijd], 0
-	mov [@@dt], 1					; [time unit]
-
-	mov eax, 25
-	mov ebx, 25
-
-	push eax
-	push ebx
-
-	mov [@@xpos], eax				;[pixels]
-	mov [@@ypos], ebx				;[pixels]
-	mov eax, [@@vxbegin]			;[pixels/time unit]
-	mov [@@vx], eax
-	mov eax, [@@vybegin]			;[pixels/time unit]
-	mov [@@vy], eax
-	mov [@@ax], 0					;[pixels/time unit²]
-	mov [@@ay], -10					;[pixels/time unit²] downward accelaration due to "gravity"
-
-
-	call drawPixel, [@@xpos], [@@ypos], [@@color]
-	;call	waitForSpecificKeystroke, 001Bh
-
-	@@tijdsloop:
-		mov eax, [@@dt]
-		add [@@tijd], eax
-
-		;vx += ax*dt
-		mov eax, [@@ax]				; ik weet dat ax toch nul is maar in toekomst zal ook windkracht komen
-		mov ebx, [@@dt]				; ik weet ook dat dt toch 1 is (maar zou kunne veranderen) 
-		mul ebx
-		add [@@vx], eax
-		;vy += ay*dt
-		mov eax, [@@ay]
-		mov ebx, [@@dt]
-		mul ebx
-		add [@@vy], eax
-		;xpos += vx*dt 
-		mov eax, [@@vx]
-		mov ebx, [@@dt]
-		mul ebx
-		add [@@xpos], eax
-		;ypos += vy*dt
-		mov eax, [@@vy]
-		mov ebx, [@@dt]
-		imul ebx
-		add [@@ypos], eax
-		
-		;Bring back old coordinations
-		pop ebx						
-		pop eax
-
-		;bring back old coordinations
-		call drawPixel, [@@xpos], [@@ypos], [@@color]
-
-		mov eax, [@@xpos]
-		mov ebx, [@@ypos]
-		
-		;Store new coordinations for next loop
-		push eax
-		push ebx
-
-		;Checks wall collision
-		cmp eax, 297							; (hou rekening met breedte kogel)
-		jge @@endWall
-		
-		;Checks ground collision
-		cmp ebx, 3								; (hou rekening met hoogte kogel)								
-		jle @@endGround
-
-
-		jmp @@tijdsloop
-
-	@@endWall:
-			call drawPixel, 297, ebx,  [@@color]
-			jmp @@end
-	@@endGround:
-			call drawPixel, eax, 2,  [@@color]
-
-	@@end:
-	ret
-ENDP drawbulletPath
-; ----------------------------------------------------------------------------
-; Mouse function
-; AX = condition mask causing call
-; CX = horizontal cursor position
-; DX = vertical cursor position
-; DI = horizontal counts
-; SI = vertical counts
-; BX = button state:
-;      |F-2|1|0|
-;        |  | `--- left button (1 = pressed)
-;        |  `---- right button (1 = pressed)
-;        `------ unused
-; DS = DATASEG
-; ES = DATASEG
-; ----------------------------------------------------------------------------
-
-
-PROC click
-	USES eax, ebx, ecx, edx
-	;Show mouse pointer
-	mov ax, 1
-	int 33h 
-	
-	;Booleanstate if mouse is clicked or unclicked
-
-	@@mousepressed:
-	and bl, 1			; check if right button of mouse is clicked
-	jz @@skipit			; only execute if a mousebutton is pressed
-
-	call drawtrajectory
-	
-	@@skipit:
-	;call printSignedInteger, [@@a]
-	;call printSignedInteger, [@@b]
-	;call bulletPath, [@@a], [@@b]
-	;call showcursor
-	;call mouse_uninstall
-
-	
-	
-	ret
-ENDP click
-
-
-
-PROC mouse_let_go
-	ARG @@new_value: dword
-	USES eax, ebx, ecx, edx
-	call	appendList,offset arrlen_mousecoord, [@@new_value]
-	call printIntList, offset arrlen_mousecoord
-
-	ret
-
-
-
-
-ENDP mouse_let_go
-
-
-PROC showcursor
-	USES eax, ebx
-	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
-
-	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
-    movzx eax, dx		; get mouse height
-	mov ebx, 149
-	sub ebx, eax
-	mov eax, ebx
-
-	mov ebx,0
-	sar cx, 1			; horizontal cursor position is doubled in input 
-	movzx ebx, cx
-
-	;call printSignedInteger, ebx
-	;call printSignedInteger, eax
-	call	appendList, offset arrlen_mousecoord, ebx	;xcoord
-	call	appendList, offset arrlen_mousecoord, eax	;ycoord
-
-	; if arrlen_mousecoord >=4:
-	mov ecx, [offset arrlen_mousecoord]
-	cmp ecx, 6
-	jl @@return
-
-	call moveElementofList2, offset arrlen_mousecoord
-
-	call get_X1_ofList, offset arrlen_mousecoord
-	mov [@@x1], eax
-	;call printSignedInteger, [@@x1]
-	
-	call get_Y1_ofList, offset arrlen_mousecoord
-	mov [@@y1], eax
-	;call printSignedInteger, [@@y1]
-
-	call get_X2_ofList, offset arrlen_mousecoord
-	mov [@@x2], eax
-	;call printSignedInteger, [@@x2]
-
-	call get_Y2_ofList, offset arrlen_mousecoord
-	mov [@@y2], eax
-
-	call printIntList, offset arrlen_mousecoord
-	call drawCursor, [@@x1], [@@y1], 0
-	call drawCursor, [@@x2], [@@y2], 99
-
-
-	@@return:
-
-	ret
-ENDP showcursor
-
-
-PROC drawtrajectory
-	USES eax, ebx, ecx, edx
-	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
-
-	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
-    movzx eax, dx		; get mouse height
-	mov ebx, 149
-	sub ebx, eax
-	mov eax, ebx
-
-	mov ebx,0
-	sar cx, 1			; horizontal cursor position is doubled in input 
-	movzx ebx, cx
-
-	;call drawPixel, ebx, eax, 3
-
-	call	appendList, offset arrlen_mousecoord, ebx	;xcoord
-	call	appendList, offset arrlen_mousecoord, eax	;ycoord
-	;call printSignedInteger, ebx
-	;call printSignedInteger, eax
-	;call	printIntList, offset arrlen_mousecoord
-
-	; if arrlen_mousecoord >=8:
-	mov ecx, [offset arrlen_mousecoord]
-	cmp ecx, 8
-	jl @@skipit
-
-	call moveElementofList, offset arrlen_mousecoord
-
-	call get_X1_ofList, offset arrlen_mousecoord
-	mov [@@x1], eax
-	;call printSignedInteger, [@@x1]
-	
-	call get_Y1_ofList, offset arrlen_mousecoord
-	mov [@@y1], eax
-	;call printSignedInteger, [@@y1]
-
-	call get_X2_ofList, offset arrlen_mousecoord
-	mov [@@x2], eax
-	;call printSignedInteger, [@@x2]
-
-	call get_Y2_ofList, offset arrlen_mousecoord
-	mov [@@y2], eax
-	;call printSignedInteger, [@@y2]
-
-	call get_oldX_ofList, offset arrlen_mousecoord
-	mov [@@oldXpos], eax
-	;call printSignedInteger, [@@oldXpos]
-
-	call get_oldY_ofList, offset arrlen_mousecoord
-	mov [@@oldYpos], eax
-	;call printSignedInteger, [@@oldYpos]
-
-	
-	;call 	printSignedInteger, [arrlen_mousecoord]
-	;call	printIntList, offset arrlen_mousecoord
-	
-	;call drawCursor, [@@oldXpos], [@@oldYpos], 0
-	call drawPixel, [@@x1], [@@y1], 99
-	;call drawCursor, [@@x2], [@@y2], 3
-
-
-	;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
-	call trajectory_x, [@@x1], [@@oldXpos]
-	mov [@@a], eax
-
-	call trajectory_y, [@@y1], [@@oldYpos]
-	mov [@@b], eax
-
-	call drawline, 25, 25, [@@a], [@@b], 0
-
-
-	call trajectory_x, [@@x1], [@@x2]
-	mov [@@a], eax
-
-
-	call trajectory_y, [@@y1], [@@y2]
-	mov [@@b], eax
-
-
-	call drawline, 25, 25, [@@a], [@@b], 99
-
-	;call waitForSpecificKeystroke,001Bh 
-
-	;call bulletPath, [@@a], [@@b]
-
-	;call drawline, [@@x1], [@@y1], [@@oldXpos], [@@oldYpos], 0
-	;call drawline, [@@x1], [@@y1], [@@x2], [@@y2], 99
-
-	@@skipit:
-	ret
-ENDP drawtrajectory
 
 PROC printSignedInteger
 	ARG	@@printval:dword
@@ -705,280 +110,15 @@ PROC printSignedInteger
 	ret
 ENDP printSignedInteger
 
-
-PROC drawline
-	ARG @@x1:dword, @@y1:dword, @@x2:dword, @@y2:dword, @@color:dword
-	LOCAL @@dx:dword, @@dy:dword, @@P:dword, @@count:dword, @@xoperator: dword, @@yoperator: dword
-	USES eax, ebx,ecx, edx
-
-	;Check if x2<=298, else x2 = 298
-	@@Check_x2:
-	cmp [@@x2], 298
-	jle @@Check_y2
-	mov [@@x2], 298
-
-	@@Check_y2:
-	;Check if y2>=0, else y2 = 0
-	cmp [@@y2], 0
-	jge @@continue
-	mov [@@y2], 0
-
-	@@continue:
-	;dx = x2 - x1
-	mov eax, [@@x2]
-	sub eax, [@@x1]
-	mov [@@dx], eax
-
-	;dy = y2 - y1
-	mov eax, [@@y2]
-	sub eax, [@@y1]
-	mov [@@dy], eax
-
-
-	;Case 1: dx positive and dy positive, then slope positive 
-	@@case1:
-		cmp [@@dx], 0
-		jl @@case2
-		cmp [@@dy],0
-		jl @@case3
-
-		;dx pos: xoperator = +1
-		mov [@@xoperator], 1
-		;dy pos: operator = +1
-		mov [@@yoperator], 1
-
-		;Compare dx an dy	
-		jmp @@compare_dx_and_dy
-
-
-	;Case 2: dx negative and dy positive, then slope negative
-	@@case2:
-		cmp [@@dy],0
-		jl @@case4
-
-		;dx neg: xoperator = -1
-		mov [@@xoperator], -1
-		;dy pos: operator = +1
-		mov [@@yoperator], 1
-
-		;negate dx to make it positive
-		neg [@@dx]
-
-		;Compare dx an dy	
-		jmp @@compare_dx_and_dy
-
-	;Case 3: dx positive and dy negative, then slope negative
-	@@case3:
-		;dx pos: xoperator = +1
-		mov [@@xoperator], 1
-		;dy neg: operator = -1
-		mov [@@yoperator], -1
-
-		;negate dy to make it positive
-		neg [@@dy]
-
-		;Compare dx an dy	
-		jmp @@compare_dx_and_dy
-
-	;Case 4: dx negative and dy negative, then slope positive
-	@@case4:
-		;dx pos: xoperator = -1
-		mov [@@xoperator], -1
-		;dy pos: operator = -1
-		mov [@@yoperator], -1
-
-		;negate dx and dy to make them positive
-		neg [@@dx]
-		neg [@@dy]
-
-		;Compare dx an dy	
-		jmp @@compare_dx_and_dy
-
-	;Compare dx an dy: if dx>=dy then slope<=1, if dx<dy then slope>1	
-	@@compare_dx_and_dy:
-		mov eax, [@@dx]
-		mov ebx, [@@dy]
-		cmp eax, ebx
-		jge @@slope_less_or_equal_1
-		jmp @@slope_greater_1 
-
-
-	;a) slope<=1, dx>=dy
-	@@slope_less_or_equal_1:
-		;P = 2dy - dx
-		mov eax, [@@dy]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dx]
-		mov [@@P], eax
-
-		;count = dx
-		mov eax, [@@dx]
-		mov [@@count], eax
-
-		;initialize
-		mov eax, [@@x1]
-		mov ebx, [@@y1]
-		mov ecx, [@@count]
-		jcxz @@slope_greater_1 
-		
-
-		;---------------------------------------------------
-		;bresenham's line algorithm:
-		;This algorithm is used to draw a line between two points (x1, y1) and (x2, y2). 
-		;If the slope <=1, xoperator (which can be +1 (increment) or -1 (decrement), dependent of dx) is added to x1.
-		;if P<0: y1 = y1 and P = P + 2*dy 
-		;if P>0: y1 = y1 + 1 and P = P + 2*dy - 2*dx
-		; The loop goes on until x1 has reached x2 or until dx is zero.
-		;---------------------------------------------------
-
-		@@bl_loop1:
-			call drawPixel, eax,ebx, [@@color]
-			
-			add eax, [@@xoperator]
-
-			push eax
-			push ebx
-
-			cmp [@@P], 0					
-			jl @@Pkleinerdan0_1
-			
-			call P_positive, [@@P], [@@dx], [@@dy]
-			mov [@@P], eax
-			
-			pop ebx 
-			pop eax 
-
-			add ebx, [@@yoperator]
-
-			loop @@bl_loop1
-			jmp @@end
-
-			@@Pkleinerdan0_1:
-			call P_negative, [@@P], [@@dy]
-			mov [@@P], eax
-
-			pop ebx
-			pop eax
-
-			loop @@bl_loop1
-			jmp @@end
-
-
-	;b) slope>1, dx<dy
-	@@slope_greater_1:
-		;P = 2dx - dy
-		mov eax, [@@dx]
-		mov ebx, 2
-		mul ebx
-		sub eax, [@@dy]
-		mov [@@P], eax
-
-		;count = dy
-		mov eax, [@@dy]
-		mov [@@count], eax
-
-		;initialize
-		mov eax, [@@x1]
-		mov ebx, [@@y1]
-		mov ecx, [@@count]	
-		;cmp ecx, 0
-		jcxz @@end
-
-		;---------------------------------------------------
-		;bresenham's line algorithm:
-		;This algorithm is used to draw a line between two points (x1, y1) and (x2, y2). 
-		;If the slope >1, yoperator (which can be +1 (increment) or -1 (decrement), dependent of dy) is added to y1.
-		;if P<0: x1 = x1 and P = P + 2*dx 
-		;if P>0: x1 = x1 + 1 and P = P + 2*dx - 2*dy
-		; The loop goes on until y1 has reached y2 or until dy is zero.
-		;---------------------------------------------------
-		@@bl_loop2:
-			call drawPixel, eax,ebx, [@@color]
-
-			add ebx, [@@yoperator]
-
-			push eax
-			push ebx
-
-			cmp [@@P], 0					
-			jl @@Pkleinerdan0_2
-			
-			call P_positive, [@@P], [@@dy], [@@dx]
-			mov [@@P], eax
-			
-			pop ebx 
-			pop eax 
-
-			add eax, [@@xoperator]
-
-			loop @@bl_loop2
-			jmp @@end
-
-			@@Pkleinerdan0_2:
-			call P_negative, [@@P], [@@dx]
-			mov [@@P], eax
-
-			pop ebx
-			pop eax
-
-			loop @@bl_loop2
-			jmp @@end
-
-
-	@@end:
+PROC printString
+    ARG @@string:dword
+    USES eax, edx
+        mov ah, 09h
+        mov edx, [@@string]
+        int 21h
 
 	ret
-ENDP drawline
-
-
-PROC P_positive ;P = P + 2*dy - 2*dx
-	ARG @@P: dword, @@dx: dword, @@dy: dword RETURNS eax
-	USES ebx
-	mov eax, [@@dy]					
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax
-
-	mov eax, [@@dx]
-	mov ebx, 2
-	mul ebx
-	sub [@@P], eax 
-
-	mov eax, [@@P]
-	
-	ret
-ENDP P_positive
-	
-PROC P_negative ;P = P + 2*dy 
-	ARG @@P: dword, @@dy: dword	RETURNS eax
-	USES ebx
-
-	mov eax, [@@dy]
-	mov ebx, 2
-	mul ebx
-	add [@@P], eax	
-
-	mov eax, [@@P]
-	;call printSignedInteger, eax
-
-	ret
-ENDP P_negative
-
-
-PROC moveline
-	ARG @@oldXpos:dword, @@oldYpos:dword, @@newXpos:dword, @@newYpos: dword
-	USES eax, ebx, ecx, edx
-	mov eax, [@@newXpos]
-	mov ebx, [@@newYpos]
-	mov ecx, [@@oldXpos]
-	mov edx, [@@oldYpos]
-	call fillBackground
-	;call drawline, 25, 25, ecx, edx, 0
-	call drawline, 25, 25, eax, ebx, 99
-
-	ret
-ENDP moveline
+ENDP printString
 
 PROC printIntList
 	ARG	@@arrayptr:dword
@@ -988,7 +128,7 @@ PROC printIntList
 	mov ecx, [ebx]			; get length counter in ecx
 
 	cmp ecx, 0				; if length is 0, skip
-	je @@end
+	je @@endPrintIntList
 
 	
 	mov	ah, 2h 		; Function for printing single characters.
@@ -1002,643 +142,814 @@ PROC printIntList
 	mov	dl, 0Ah		; New line.
 	int 21h
 	
-	@@end:
+	@@endPrintIntList:
 	ret
 ENDP printIntList
 
-PROC appendList
-	ARG @@arrayptr:dword, @@new_value: dword
+; Source: Assembling programming compendium
+PROC displayString
+    ARG @@row:DWORD, @@column:DWORD, @@offset:DWORD
+    USES EAX, EBX, EDX
+
+    mov edx, [@@row]            ; row in EDX
+    mov ebx, [@@column]         ; column in EBX
+
+    mov ah, 02h                 ; set cursor position
+    shl edx, 08h                ; row in DH (00H is top)
+    mov dl, bl                  ; column in DL (00H is left)
+    mov bh, 0                   ; page number in BH
+    int 10h                     ; raise interrupt
+
+    mov ah, 09h                 ; write string to standard output
+    mov edx, [@@offset]         ; offset of ’$’-terminated string in EDX
+    int 21h                     ; raise interrupt
+
+    RET
+ENDP displayString
+
+; Terminate the program. 
+PROC terminateProcess
+    USES eax 
+
+    call setVideoMode, 03h 
+    mov ax,04C00h 
+    int 21h
+
+    ret 
+ENDP terminateProcess 
+
+; Procedure wait_VBLANK van EXAMPLES\DANCER genomen 
+; wait for @@framecount frames 
+PROC wait_VBLANK
+    ARG @@framecount: word 
+    USES eax, ecx, edx 
+
+    mov dx, 03dah                   		; Wait for screen refresh 
+    movzx ecx, [@@framecount]
+
+        @@VBlank_phase1: 
+        in al, dx  
+        and al, 8
+        jnz @@VBlank_phase1 
+        @@VBlank_phase2: 
+        in al, dx  
+        and al, 8
+        jz @@VBlank_phase2 
+    loop @@VBlank_phase1
+
+    ret  
+ENDP wait_VBLANK
+
+PROC updateColorpallete
+    ARG @@NumberOfColors:byte
+    USES eax, ebx, edx
+
+    mov ebx, offset palette 
+	mov ah, 0 
+    @@kleur: 
+        mov DX, 03C8h                       ; DAC write port
+        push eax 
+        mov al, ah 
+        out DX, Al                          ; write to IO
+        pop eax 
+
+        mov DX, 03C9h                       ; DAC data port
+        mov AL, [ebx]                       ; load red value (6-bit)
+        out DX, AL                          ; write red value
+        add ebx, 4
+        mov AL, [ebx]                       ; load green value (6-bit)
+        out DX, AL                          ; write green value
+        add ebx, 4
+        mov AL, [ebx]                       ; load blue value (6-bit)
+        out DX, AL                          ; write blue value
+        add ebx, 4
+
+        inc ah
+        cmp ah, [@@NumberOfColors]
+        jne @@kleur
+
+    ret
+ENDP updateColorpallete
+
+MACRO startscreen
+
+    call processFile, offset StartSCR
+    call displayString, 96, 106, offset msgStart
+    call waitForSpecificKeystroke, 20h ; space bar = 001Bh
+
+ENDM startscreen
+
+; Fill the background (for mode 13h): blue sky with grass and a wall
+PROC fillBackground
+    USES    eax, ebx, ecx, edx, edi
+
+    ; Initialize video memory address.
+    mov edi, VMEMADR                ; edi is destination adress: 0A0000h
+
+    ; Draw sky
+    mov ecx, SCRWIDTH*SKYHEIGHT     ; ecx = amount of elements = amount of pixels
+    mov al, 0                       ; index of the first color to change
+    rep stosb                       ;stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
+
+    ; Draw grass 
+    add edi, ecx
+    mov ecx, SCRWIDTH*(SCRHEIGHT-SKYHEIGHT)
+    mov al, 1
+    rep stosb
+    
+    ; Draw Wall = rectangle (300, 50)-(309, 149)
+    mov edx, 0                                  ; Layer of wall 0-99
+    @@drawWall:
+        mov eax, WALLVERPOS 
+        add eax, edx
+        mov ebx, SCRWIDTH
+        push edx
+        mul ebx
+        pop edx
+        add eax, WALLHORPOS
+
+        mov edi, VMEMADR
+        add edi, eax
+        mov ecx, WALLWIDTH
+        mov al, 2
+        rep stosb
+
+        inc edx
+        cmp edx, WALLHEIGHT
+        jne @@drawWall
+
+    ; Draw target = rectangle (300, 50)-(309, 149)
+    mov edx, 0                                  ; Layer of Target
+    @@drawTarget:
+        mov eax, TARGETVERPOS
+        add eax, edx
+        mov ebx, SCRWIDTH
+        push edx
+        mul ebx
+        pop edx
+        add eax, TARGETHORPOS
+
+        mov edi, VMEMADR
+        add edi, eax
+        mov ecx, TARGETWIDTH
+        mov al, 3
+        rep stosb
+
+        inc edx
+        cmp edx, TARGETHEIGHT
+        jne @@drawTarget
+
+    ret
+ENDP fillBackground
+
+;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
+PROC drawPixel                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword, @@color:byte
+    USES eax, ebx, edx, edi
+
+    mov edi, VMEMADR
+    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT = (SKYHEIGHT-1)-y_phys/FRAQBIT
+    mov eax, [@@ycoord]                 ; Can be both positive or negative
+    mov ebx, FRAQBIT
+    xor edx, edx
+    cmp eax, 0
+    jge @@positive
+    mov edx, ALLONES
+    @@positive:
+    idiv ebx
+    mov ebx, SKYHEIGHT-1
+    sub ebx, eax
+    mov eax, SCRWIDTH
+    imul ebx
+    add edi, eax
+    ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
+    mov eax, [@@xcoord]                     ;can only be positive
+    mov ebx, FRAQBIT
+    div ebx
+    add edi, eax
+    mov al, [@@color]                       ; pick the color of the pallet
+    mov [edi], al
+
+    ret
+ENDP drawPixel
+
+PROC getColor                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword RETURNS al
+    USES ebx, edx, edi
+
+    mov edi, VMEMADR
+    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT = (SKYHEIGHT-1)-y_phys/FRAQBIT
+    mov eax, [@@ycoord]                 ; Can be both positive or negative
+    mov ebx, FRAQBIT
+    xor edx, edx
+    cmp eax, 0
+    jge @@positive
+    mov edx, ALLONES
+    @@positive:
+    idiv ebx
+    mov ebx, SKYHEIGHT-1
+    sub ebx, eax
+    mov eax, SCRWIDTH
+    imul ebx
+    add edi, eax
+    ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
+    mov eax, [@@xcoord]                     ;can only be positive
+    mov ebx, FRAQBIT
+    div ebx
+    add edi, eax
+
+    xor eax, eax
+    mov al, [edi]
+
+    ret
+ENDP getColor
+
+;Mandatory for physics simulation
+PROC updateValue
+    ARG @@value:dword, @@velocity:dword, @@deltat:dword RETURNS eax
+    USES ebx, edx
+
+    mov eax, [@@velocity]
+    mov ebx, [@@deltat]
+    mov edx, 0
+    cmp eax, 0
+    jge @@positive
+    mov edx, ALLONES
+    @@positive:
+    idiv ebx
+    add eax, [@@value]
+
+    ret
+ENDP updateValue
+
+PROC deleteBullet                             ; input zijn in fractionele bits
+    ARG @@Xpos:dword, @@Ypos:dword
+    USES eax, ebx
+
+    mov eax, [@@Xpos]
+    mov ebx, [@@Ypos]
+
+    call drawPixel, eax, ebx, 0
+    add eax, FRAQBIT
+    call drawPixel, eax, ebx, 0
+    sub eax, FRAQBIT
+    add ebx, FRAQBIT
+    call drawPixel, eax, ebx, 0
+    sub ebx, FRAQBIT
+    sub eax, FRAQBIT
+    call drawPixel, eax, ebx, 0
+    add eax, FRAQBIT
+    sub ebx, FRAQBIT
+    call drawPixel, eax, ebx, 0
+
+    ret
+ENDP deleteBullet
+
+PROC drawBullet                             ; input zijn in fractionele bits
+    ARG @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
+    USES eax, ebx
+
+    ;Delete previous bullet
+    mov eax, [@@Xpos]
+    mov ebx, [@@Ypos]
+
+    call drawPixel, eax, ebx, [@@colorBullet]
+    add eax, FRAQBIT
+    call drawPixel, eax, ebx, 5
+    sub eax, FRAQBIT
+    add ebx, FRAQBIT
+    call drawPixel, eax, ebx, 5
+    sub ebx, FRAQBIT
+    sub eax, FRAQBIT
+    call drawPixel, eax, ebx, 5
+    add eax, FRAQBIT
+    sub ebx, FRAQBIT
+    call drawPixel, eax, ebx, 5
+
+    ret
+ENDP drawBullet
+
+PROC bullet_init
+    USES eax
+
+    call rand_init
+    call rand
+    call drawBullet, STARTINGX, STARTINGY, eax
+    
+    ret
+ENDP bullet_init
+
+; Checks    if the bullet collided with wall, ground or target
+;           if the bullet is out of border
+PROC checkCollision                                     ;te optimisere
+    ARG @@xpos:dword, @@ypos:dword RETURNS ecx
+    USES eax, ebx, edx
+
+    xor ecx, ecx
+
+    @@groundCheck:
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        sub edx, eax
+        call getColor, ebx, edx
+        cmp eax, 1
+        jne @@targetCheck
+        mov ecx, 1
+        jmp @@collisionEnd
+
+    @@targetCheck:                        ; Wall = (300,0)-(309,99)
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        add ebx, eax
+        call getColor, ebx, edx
+        cmp eax, 3
+        jne @@wallCheck
+        mov ecx, 2
+        jmp @@collisionEnd
+
+    @@wallCheck:                        ; Wall = (300,0)-(309,99)
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        add ebx, eax
+        call getColor, ebx, edx
+        cmp eax, 2
+        jne @@onTheWallCheck
+        mov ecx, 3
+        jmp @@collisionEnd
+
+    @@onTheWallCheck:                        ; Wall = (300,0)-(309,99)
+        mov ebx, [@@xpos]
+        mov edx, [@@ypos]
+        mov eax, 1*FRAQBIT
+        sub edx, eax
+        call getColor, ebx, edx
+        cmp eax, 2
+        jne @@upperCheck
+        mov ecx, 4
+        jmp @@collisionEnd
+
+    mov ebx, [@@xpos]
+    mov edx, [@@ypos]
+    @@upperCheck:
+        cmp edx, 148*FRAQBIT
+        jle @@leftBoundCheck
+        mov ecx, 5
+        jmp @@collisionEnd
+
+    @@leftBoundCheck:
+        cmp ebx, 1*FRAQBIT
+        jge @@rightBoundCheck
+        mov ecx, 6
+        jmp @@collisionEnd
+
+    @@rightBoundCheck:
+        cmp ebx, 318*FRAQBIT
+        jle @@noCollision
+        mov ecx, 7
+        jmp @@collisionEnd
+
+    @@noCollision:
+        mov ecx, 0
+        jmp @@collisionEnd
+
+    @@collisionEnd:
+    ret
+ENDP checkCollision
+
+; To replace bulllet once collided
+PROC replaceBullet
+    ARG @@collisionType:dword, @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
+    LOCAL @@waittime:dword
+    USES ecx
+
+    mov [@@waittime], 50
+    call deleteBullet, [@@Xpos], [@@Ypos]
+
+    mov ecx, [@@collisionType]
+
+    cmp ecx, 1
+    je @@groundCase
+    cmp ecx, 2
+    je @@targetCase
+    cmp ecx, 3
+    je @@wallCase
+    cmp ecx, 4
+    je @@onTheWallCase
+    cmp ecx, 5
+    je @@upperLimitCase
+    cmp ecx, 6
+    je @@leftLimitCase
+    cmp ecx, 7
+    je @@rightLimitCase
+
+    ; Hé Alec lees dit aub: dus ge zit kheb hier een paar deletebullets gecomment omda het misschien beter is om
+    ; de gemiste bullet te laten zoda de missers ziet en de random kleure extra aandacht krijge
+    ; als je de ";" weg haalt gaat er nx kapot (normaal gezien (¬‿¬ ))
+
+    @@groundCase:
+        call drawBullet, [@@Xpos], 1*FRAQBIT, [@@colorBullet]
+        call displayString, 82, 108, offset msgGround
+        call wait_VBLANK, [@@waittime]
+        call displayString, 82, 108, offset BLANK
+        ;call deleteBullet, [@@Xpos], 1*FRAQBIT
+        jmp @@endReplacement
+        
+    @@targetCase:
+        call drawBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call displayString, 82, 108, offset msgSucces
+        mov [@@waittime], 100
+        call wait_VBLANK, [@@waittime]
+        call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
+        call processFile, offset WinSCR
+        call displayString, 97, 106, offset msgWin
+        jmp @@endNoReplacement
+
+    @@wallCase:
+        call drawBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call displayString, 82, 108, offset msgWall
+        call wait_VBLANK, [@@waittime]
+        call displayString, 82, 108, offset BLANK
+        ;call deleteBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos]
+        jmp @@endReplacement
+        
+    @@onTheWallCase:
+        call drawBullet, [@@Xpos], (149-WALLVERPOS+2)*FRAQBIT, [@@colorBullet]    
+        call displayString, 82, 108, offset msgWall
+        call wait_VBLANK, [@@waittime]
+        call displayString, 82, 108, offset BLANK
+        ;call deleteBullet, [@@Xpos], 101*FRAQBIT
+        jmp @@endReplacement
+
+    @@upperLimitCase:
+        call drawBullet, [@@Xpos], 148*FRAQBIT, [@@colorBullet]
+        call displayString, 82, 108, offset msgTooHigh
+        call wait_VBLANK, [@@waittime]
+        call displayString, 82, 108, offset BLANK
+        call deleteBullet, [@@Xpos], 148*FRAQBIT
+        jmp @@endReplacement
+    
+    @@leftLimitCase:
+        call drawBullet, 1*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call displayString, 82, 108, offset msgOutOfBound
+        call wait_VBLANK, [@@waittime]
+        call displayString, 82, 108, offset BLANK
+        call deleteBullet, 1*FRAQBIT, [@@Ypos]
+        jmp @@endReplacement
+
+    @@rightLimitCase:
+        call drawBullet, 318*FRAQBIT, [@@Ypos], [@@colorBullet]
+        call displayString, 82, 108, offset msgOutOfBound
+        call wait_VBLANK, [@@waittime]
+        call displayString, 82, 108, offset BLANK
+        call deleteBullet, 318*FRAQBIT, [@@Ypos]
+        jmp @@endReplacement
+
+    @@endReplacement:
+        call bullet_init
+    @@endNoReplacement:
+
+    ret
+ENDP replaceBullet
+
+;Initialize a throw
+PROC bulletPath
+    ARG @@vx_0:dword, @@vy_0:dword, @@colorBullet:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
+    USES eax, ebx, ecx, edx
+
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
+	;Startingposition
+    mov [@@xpos], STARTINGX        ;[distance unit] 
+    mov [@@ypos], STARTINGY        ;[distance unit]
+    mov eax, [@@vx_0]            ;[distance/time]
+    mov [@@vx], eax                 ;[pixels/time]
+    mov eax, [@@vy_0]            ;[distance/time]
+    mov [@@vy], eax
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
+
+    ;Nodig om voor later
+    mov eax, [@@xpos]
+    mov ebx, [@@ypos]
+    push eax
+    push ebx
+
+    xor ecx, ecx
+    @@tijdsloop: 
+
+        ;xpos += vx*dt
+        call updateValue, [@@xpos], [@@vx], [@@dt]
+        mov [@@xpos], eax
+        ;ypos += vy*dt
+        call updateValue, [@@ypos], [@@vy], [@@dt]
+        mov [@@ypos], eax
+        ;vy += ay*dt 
+        call updateValue, [@@vy], [@@ay], [@@dt]
+        mov [@@vy], eax
+
+        call checkCollision, [@@xpos], [@@ypos]
+        cmp ecx, 0
+        jne @@endPath
+
+    
+        ;Bring back old coordinations
+        pop ebx
+        pop eax
+        call deleteBullet, eax, ebx
+        call drawBullet, [@@xpos], [@@ypos], [@@colorBullet]
+        
+        ;Store new coordinations for next loop
+        mov eax, [@@xpos]
+        mov ebx, [@@ypos]
+        push eax
+        push ebx
+
+        ;Animation
+        call wait_VBLANK, 1                     ; [*10ms] animation purposes
+                                                ; = FRAQBITS time unit
+        jmp @@tijdsloop 
+
+        @@endPath:
+        ;Bring back old coordinations
+        pop ebx
+        pop eax
+        call replaceBullet, ecx, eax, ebx, [@@colorBullet]
+    ret 
+ENDP bulletPath 
+
+;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
+PROC drawCube                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword
+    USES eax, ebx, ecx
+
+    mov ebx, [@@xcoord]
+    mov ecx, [@@ycoord]
+
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@next1
+	call drawPixel, ebx, ecx, 4
+
+    @@next1:
+    add ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@next2
+	call drawPixel, ebx, ecx, 4
+    
+    @@next2:
+    sub ecx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@next3
+	call drawPixel, ebx, ecx, 4
+    
+    @@next3:
+    sub ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 0
+    jne @@end
+	call drawPixel, ebx, ecx, 4
+
+    @@end:
+    ret
+ENDP drawCube
+
+PROC deleteCube                              ; input zijn in fractionele bits
+    ARG @@xcoord:dword ,@@ycoord:dword
+    USES eax, ebx, ecx
+
+    mov ebx, [@@xcoord]
+    mov ecx, [@@ycoord]
+
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@next1
+	call drawPixel, ebx, ecx, 0
+
+    @@next1:
+    add ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@next2
+	call drawPixel, ebx, ecx, 0
+    
+    @@next2:
+    sub ecx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@next3
+	call drawPixel, ebx, ecx, 0
+    
+    @@next3:
+    sub ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 4
+    jne @@end
+	call drawPixel, ebx, ecx, 0
+
+    @@end:
+    ret
+ENDP deleteCube
+
+PROC drawTrajectory
+	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
 	USES eax, ebx, ecx
 
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	add  [dword ptr ebx], 1	; add 1 to the actual value of arrlen_mouse for the print procedure later
-	add ecx, 1	;add 1 to counter of this loop
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
+	mov eax, [@@dx]
+	mov ebx, [@@dy]
 
-	mov eax, [@@new_value]
-	mov [dword ptr ebx], eax	; putting the new value after the last element of the list
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
+	;Startingposition
+    mov [@@xpos], STARTINGX         ;[distance unit] 
+    mov [@@ypos], STARTINGY         ;[distance unit]
+    mov [@@vx], eax                 ;[pixels/time]
+    mov [@@vy], ebx
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
-	ret
+    mov ecx, 4
+    @@drawloop:
+        push ecx
+	    mov ecx, TIMESTEP/16
+		@@tijdsloop:
+			;xpos += vx*dt
+			call updateValue, [@@xpos], [@@vx], [@@dt]
+			mov [@@xpos], eax
+			;ypos += vy*dt
+			call updateValue, [@@ypos], [@@vy], [@@dt]
+			mov [@@ypos], eax
+			;vy += ay*dt 
+			call updateValue, [@@vy], [@@ay], [@@dt]
+			mov [@@vy], eax
 
-ENDP appendList
+			loop @@tijdsloop
 
-PROC moveElementofList
-	ARG @@arrayptr:dword
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+        call drawCube, eax, ebx
+
+        pop ecx
+        loop @@drawloop
+
+    ret
+ENDP drawTrajectory
+
+PROC deleteTrajectory
+	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
 	USES eax, ebx, ecx
-	
-	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
-	;First check if it's an array of 8 elements
-	;cmp [dword ptr ebx], 8
-	;jne @@skip
 
-	sub  [dword ptr ebx], 2	; sub 2 to the actual value of arrlen_mouse so the length becomes 6 for the print procedure later
+	mov eax, [@@dx]
+	mov ebx, [@@dy]
 
-	add ebx, 8		;go to the second element
-	mov ecx, 4		; counter for the loop
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
+	;Startingposition
+    mov [@@xpos], STARTINGX         ;[distance unit] 
+    mov [@@ypos], STARTINGY         ;[distance unit]
+    mov [@@vx], eax                 ;[pixels/time]
+    mov [@@vy], ebx
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
-	@@arrayloop:
-		add ebx, 12					;go 3 elements further
-		mov eax, [ebx]				;store this element in eax
-		sub ebx, 8					;go 2 elements back
-		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
-		loop @@arrayloop
-	
-	
-	@@skip:
-	ret
+    mov ecx, 4
+    @@drawloop:
+        push ecx
+	    mov ecx, TIMESTEP/16
+		@@tijdsloop:
+			;xpos += vx*dt
+			call updateValue, [@@xpos], [@@vx], [@@dt]
+			mov [@@xpos], eax
+			;ypos += vy*dt
+			call updateValue, [@@ypos], [@@vy], [@@dt]
+			mov [@@ypos], eax
+			;vy += ay*dt 
+			call updateValue, [@@vy], [@@ay], [@@dt]
+			mov [@@vy], eax
 
-ENDP moveElementofList
+			loop @@tijdsloop
 
-PROC moveElementofList2
-	ARG @@arrayptr:dword
-	USES eax, ebx, ecx
-	
-	mov ebx, [@@arrayptr]	; store pointer of arrlen in ebx
-	;First check if it's an array of 8 elements
-	;cmp [dword ptr ebx], 8
-	;jne @@skip
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+        call deleteCube, eax, ebx
 
-	sub  [dword ptr ebx], 2	; sub 2 to the actual value of arrlen_mouse so the length becomes 4 for the print procedure later
+        pop ecx
+        loop @@drawloop
 
-	mov ecx, 4		; counter for the loop
+    ret
+ENDP deleteTrajectory
 
-	@@arrayloop:
-		add ebx, 12					;go 3 elements further
-		mov eax, [ebx]				;store this element in eax
-		sub ebx, 8					;go 2 elements back
-		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
-		loop @@arrayloop
-	
-	
-	@@skip:
-	ret
-
-ENDP moveElementofList2
-
-;----------------------------------------------------------
-;This is for mousehandling
-
-PROC get_X1_ofList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	;mov ecx, [ebx]			; get length counter in ecx
-	add ebx, 4
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_X1_ofList
-
-PROC get_X2_ofList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 4
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_X2_ofList
-
-PROC get_Y1_ofList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	;mov ecx, [ebx]			; get length counter in ecx
-	add ebx, 8
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_Y1_ofList
-
-PROC get_Y2_ofList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_Y2_ofList
-
-PROC get_oldX_ofList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 12
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_oldX_ofList
-
-PROC get_oldY_ofList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 8
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_oldY_ofList
-
-;--------------------------------------------------------
-
-;---------------------------------------------------------
-;This is for boolean_mouse_dragged
-PROC get_X1_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	;mov ecx, [ebx]			; get length counter in ecx
-	add ebx, 8
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_X1_ofBoolList
-
-PROC get_X2_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 4
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_X2_ofBoolList
-
-PROC get_Y1_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	;mov ecx, [ebx]			; get length counter in ecx
-	add ebx, 12
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_Y1_ofBoolList
-
-PROC get_Y2_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_Y2_ofBoolList
-
-PROC get_oldX_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 16
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_oldX_ofBoolList
-
-PROC get_oldY_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 12
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_oldY_ofBoolList
-
-PROC get_B1_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	;mov ecx, [ebx]			; get length counter in ecx
-	add ebx, 4
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_B1_ofBoolList
-
-PROC get_B2_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx, ecx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov ecx, [ebx]			; get length counter in ecx
-	@@arrayloop:
-		add ebx, 4
-		loop @@arrayloop
-	sub ebx, 8
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_B2_ofBoolList
-
-PROC get_oldB_ofBoolList
-	ARG @@arrayptr:dword RETURNS eax
-	USES ebx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	;mov ecx, [ebx]			; get length counter in ecx
-	add ebx, 16
-	mov eax, [dword ptr ebx]
-
-	ret
-ENDP get_oldB_ofBoolList
-
-
-
-
-;--------------------------------------------------------------
 PROC drawCursor
-	ARG @@x:dword ,@@y:dword, @@color: dword
+	ARG @@x:dword ,@@y:dword
 	USES eax
-
-	;Check if x>=1, else put it on 1
-	@@Check_x_1:
-	cmp [@@x], 1
-	jge @@Check_x_width
-	mov [@@x], 1
-
-	;Check if x<=296, else put it on 296
-	@@Check_x_width:
-	cmp [@@x], 296
-	jle @@Check_y_0
-	mov [@@x], 296
-
-	;Check if y>=1, else put it on 1
-	@@Check_y_0:
-	cmp [@@y], 1
-	jge @@continue
-	mov [@@y], 1
-
-	@@continue:
-	mov eax, [@@color]
-	call drawPixel, [@@x], [@@y], eax
-
-	sub [@@x], 1
-	call drawPixel, [@@x], [@@y], eax
-
-	add [@@x], 2
-	call drawPixel, [@@x], [@@y], eax
-
-	sub [@@x], 1
-	sub [@@y], 1
-	call drawPixel, [@@x], [@@y], eax
-
-	add [@@y], 2
-	call drawPixel, [@@x], [@@y], eax
-
-
+	call drawPixel, [@@x], [@@y], 200
+	sub [@@x], 1*FRAQBIT
+	call drawPixel, [@@x], [@@y], 200
+	add [@@x], 2*FRAQBIT
+	call drawPixel, [@@x], [@@y], 200
+	sub [@@x], 1*FRAQBIT
+	sub [@@y], 1*FRAQBIT
+	call drawPixel, [@@x], [@@y], 200
+	add [@@y], 2*FRAQBIT
+	call drawPixel, [@@x], [@@y], 200
 	ret
-
 ENDP drawCursor
 
-PROC trajectory_x
+
+PROC appendList
+	ARG @@arrayptr:dword, @@newB:dword, @@newX:dword, @@newY:dword
+	USES eax, ebx, ecx
+
+	;Coordinates transformation from video mode to our base
+	; x-coordinate
+	mov eax, [@@newX]
+    mov ebx, FRAQBIT/2
+    mul ebx
+	push eax
+	; y-coordinate
+	mov eax, [@@newY]
+	mov ebx, 149
+	sub ebx, eax
+	mov eax, ebx
+    mov ebx, FRAQBIT
+    mul ebx
+	push eax
+
+	mov eax, [@@arrayptr]			; store pointer in ebx
+	add [dword ptr eax], 3			; add 1 to the actual value of arrlen_mouse for the print procedure later
+	mov ecx, [eax]					; get length counter in ecx
+
+	@@arrayloop:
+		add eax, 4
+		loop @@arrayloop
+
+	pop ebx 
+	mov [dword ptr eax], ebx
+	sub eax, 4
+	pop ebx
+	mov [dword ptr eax], ebx
+	sub eax, 4
+	mov ebx, [@@newB]
+	mov [dword ptr eax], ebx
+
+	ret
+ENDP appendList
+
+PROC getOfList
+	ARG @@arrayptr:dword, @@index:dword RETURNS eax
+	USES ebx
+
+	mov eax, [@@index]
+	mov ebx, 4
+	mul ebx
+
+	mov ebx, [@@arrayptr]	; store pointer in ebx
+	add ebx, eax
+	mov eax, [dword ptr ebx]
+
+	ret
+ENDP getOfList
+
+PROC getDeltaX
 	ARG @@x1:dword, @@x2:dword RETURNS eax
-	LOCAL @@dx: dword
+    USES ebx, edx
 	
 	;dx = x2 - x1
 	mov eax, [@@x2]
 	sub eax, [@@x1]
-	mov [@@dx], eax
+	neg eax
 
-	mov eax, 25
-	sub eax, [@@dx]
+    mov ebx, XCONV
+    imul ebx
 
-	;Chech if eax is greater than 0, else put it on 0
-	cmp eax, 0
-	jge @@skip
-	mov eax, 0
 
-	@@skip:
+    cmp eax, -STARTINGX
+    jge @@end
+    mov eax, -STARTINGX
+
+    @@end:
 	ret
-ENDP trajectory_x
+ENDP getDeltaX
 
-PROC trajectory_y
+PROC getDeltaY
 	ARG @@y1:dword, @@y2:dword RETURNS eax
-	LOCAL @@dy: dword
+    USES ebx, edx
 
 	;dy = y2 - y1
 	mov eax, [@@y2]
 	sub eax, [@@y1]
-	mov [@@dy], eax
+	neg eax
 
-	mov eax, 25
-	sub eax, [@@dy]
-
-	ret
-ENDP trajectory_y
-
-;-------------------------------------------
-;This is for mousehandling
-PROC undraw_last_trajectoryline
-	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@a: dword, @@b: dword
-	USES eax
-
-	call get_X1_ofList, offset arrlen_mousecoord
-	mov [@@x1], eax
-
-	call get_Y1_ofList, offset arrlen_mousecoord
-	mov [@@y1], eax
-
-	call get_X2_ofList, offset arrlen_mousecoord
-	mov [@@x2], eax
-
-	call get_Y2_ofList, offset arrlen_mousecoord
-	mov [@@y2], eax
-
-	call trajectory_x, [@@x1], [@@x2]
-	mov [@@a], eax
-
-	call trajectory_y, [@@y1], [@@y2]
-	mov [@@b], eax
-
-	call drawline, 25, 25, [@@a], [@@b], 0
-
-	call drawPixel, [@@x1], [@@y1], 0
-
-	call bulletPath, [@@a], [@@b]
+    mov ebx, YCONV
+    imul ebx
 
 	ret
-ENDP undraw_last_trajectoryline
-;----------------------------------------------
-
-;-------------------------------------------
-;This is for boolean_mouse_dragged
-PROC undraw_last_bool_trajectoryline
-	LOCAL @@x1: dword, @@y1: dword, @@x2: dword, @@y2: dword, @@a: dword, @@b: dword
-	USES eax
-
-	call get_X1_ofBoolList, offset arrlen_mousecoord
-	mov [@@x1], eax
-
-	call get_Y1_ofBoolList, offset arrlen_mousecoord
-	mov [@@y1], eax
-
-	call get_X2_ofBoolList, offset arrlen_mousecoord
-	mov [@@x2], eax
-
-	call get_Y2_ofBoolList, offset arrlen_mousecoord
-	mov [@@y2], eax
-
-	call trajectory_x, [@@x1], [@@x2]
-	mov [@@a], eax
-
-	call trajectory_y, [@@y1], [@@y2]
-	mov [@@b], eax
-
-	call drawline, 25, 25, [@@a], [@@b], 0
-
-	call drawPixel, [@@x1], [@@y1], 0
-
-	call bulletPath, [@@a], [@@b]
-
-	ret
-ENDP undraw_last_bool_trajectoryline
-;-------------------------------------------
-
-PROC reset
-	ARG	@@arrayptr:dword
-	USES eax, ebx, ecx, edx
-	mov ebx, [@@arrayptr]	; store pointer in ebx
-	mov [dword ptr ebx], 0	; add 1 to the actual value of arrlen_mouse for the print procedure later
-
-	ret
-ENDP reset
-
-PROC mousehandling
-	USES ebx, ecx
-	mov ecx, 5
-	
-	@@start_mousehandling:
-		call printSignedInteger, ecx
-		;draw trajectory
-
-		call 	mouse_install, offset click
-		;call printIntList, offset arrlen_mousecoord
-
-
-		;call 	release
-		;------------------------------------------
-		
-		call	waitForSpecificKeystroke, 001Bh
-
-		;Hide visible mouse pointer
-		mov ax, 2
-		int 33h 
-
-		;call printIntList, offset arrlen_mousecoord
-
-		call undraw_last_trajectoryline
-
-
-		call mouse_uninstall
-
-
-		call reset, offset arrlen_mousecoord
-
-		loop @@start_mousehandling
-	ret
-ENDP mousehandling
-
-PROC release
-	USES ebx, ecx
-	;2 beginvoorwaarden
-	;1) is de muis unclicked
-	;2) werd er al op de muis gelicked of maw is arrlen_mousecoord = 6
-	
-	@@bvw1:
-
-	;call printSignedInteger, [offset arrlen_mousecoord]
-	call	waitForSpecificKeystroke, 001Bh
-
-	call undraw_last_trajectoryline
-
-	call mouse_uninstall
-
-	call reset, offset arrlen_mousecoord
-
-	@@skipit:
-	ret
-ENDP release
-
-
-PROC boolean_mouse_dragged
-	USES eax, ebx, ecx, edx
-	LOCAL @@result: dword, @@boolean1:dword, @@x1: dword, @@y1: dword, @@boolean2: dword, @@x2: dword, @@y2: dword, @@oldBoolean: dword, @@oldXpos: dword, @@oldYpos: dword, @@a: dword, @@b: dword
-
-	;Put initially result on 0
-	mov [@@result], 0
-
-	;Show mouse pointer
-	mov ax, 1
-	int 33h 
-	
-	;Boolean mouse clicked or unclicked
-	movzx eax, bl
-	;cmp eax, 0
-	;je @@skipit
-	
-	;Getting xcoord and ycoord
-	;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond 
-   	movzx edx, dx		; get mouse height
-	mov ebx, 149
-	sub ebx, edx
-	mov edx, ebx
-
-	mov ebx,0
-	sar cx, 1			; horizontal cursor position is doubled in input 
-	movzx ebx, cx
-
-	;We will make a list containing boolean, xcoord and ycoord: [boolean1, x1, y1, oldBoolean, oldXpos, oldYpos, boolean2, x2, y2]
-	call appendList, offset arrlen_mousecoord, eax	;boolean
-	call appendList, offset arrlen_mousecoord, ebx	;xcoord
-	call appendList, offset arrlen_mousecoord, edx	;ycoord
-	
-
-	;First check if it's an array of 12 elements
-	; if arrlen_mousecoord >=3:
-	mov ecx, [offset arrlen_mousecoord]
-	cmp ecx, 12
-	jl @@skipit
-	call moveBoolElementofList, offset arrlen_mousecoord
-	;call printIntList, offset arrlen_mousecoord	
-
-	;Get first boolean
-	call get_B1_ofBoolList, offset arrlen_mousecoord
-	mov [@@boolean1], eax
-
-	;Get old boolean
-	call get_oldB_ofBoolList, offset arrlen_mousecoord
-	mov [@@oldBoolean], eax
-
-	;Get new boolean
-	call get_B2_ofBoolList, offset arrlen_mousecoord
-	mov [@@boolean2], eax
-
-	;Get x1
-	call get_X1_ofBoolList, offset arrlen_mousecoord
-	mov [@@x1], eax
-	
-	;Get y1
-	call get_Y1_ofBoolList, offset arrlen_mousecoord
-	mov [@@y1], eax
-
-	;Get x2
-	call get_X2_ofBoolList, offset arrlen_mousecoord
-	mov [@@x2], eax
-
-	;Get y2
-	call get_Y2_ofBoolList, offset arrlen_mousecoord
-	mov [@@y2], eax
-	;call printSignedInteger, [@@y2]
-
-	;Get oldXpos
-	call get_oldX_ofBoolList, offset arrlen_mousecoord
-	mov [@@oldXpos], eax
-
-	;Get oldYpos
-	call get_oldY_ofBoolList, offset arrlen_mousecoord
-	mov [@@oldYpos], eax
-
-	;if oldBoolean is 1 do this
-	cmp [@@boolean1], 1
-	jne @@reset
-
-	;Draw a pixel on the place where the mouse has first clicked
-	call drawPixel, [@@x1], [@@y1], 99
-
-	;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
-	call trajectory_x, [@@x1], [@@oldXpos]
-	mov [@@a], eax
-
-	call trajectory_y, [@@y1], [@@oldYpos]
-	mov [@@b], eax
-
-	call drawline, 25, 25, [@@a], [@@b], 0
-
-
-	call trajectory_x, [@@x1], [@@x2]
-	mov [@@a], eax
-
-
-	call trajectory_y, [@@y1], [@@y2]
-	mov [@@b], eax
-
-
-	call drawline, 25, 25, [@@a], [@@b], 99
-
-
-
-
-	;The state where the mouse is let go is: [oldBoolean = 1 and boolean2 = 0]
-	cmp [@@oldBoolean], 1
-	jne @@skipit
-	cmp [@@boolean2], 0
-	jne @@skipit
-	mov [@@result], 1
-
-
-
-	@@skipit:
-	
-	;call printSignedInteger, [@@result]
-
-
-	cmp [@@result], 1
-	jne @@return
-
-	;Hide visible mouse pointer
-	mov ax, 2
-	int 33h 
-
-	;Hide trajectoryline + hide startpoint + throw bullet
-	call undraw_last_bool_trajectoryline
-
-
-	@@reset:
-	call reset, offset arrlen_mousecoord
-	
-	@@return:
-
-	ret
-
-	
-ENDP boolean_mouse_dragged
-
-PROC moveBoolElementofList
+ENDP getDeltaY
+
+;When the list contains 12 elements, the 6 last elements are moved 3 elements to the front making the list a list of 9 elements
+;For example: [boolean1, x1, y1, boolean2, x2, y2, boolean3, x3, y3, boolean4, x4, y4] => [boolean1, x1, y1, boolean3, x3, y3, boolean4, x4, y4]
+PROC moveElementsOfList
 	ARG @@arrayptr:dword
 	USES eax, ebx, ecx
 	
@@ -1656,112 +967,156 @@ PROC moveBoolElementofList
 		mov [dword ptr ebx], eax 	;replace this element with the element in eax	
 		loop @@arrayloop
 	
-	
-	@@skip:
 	ret
+ENDP moveElementsOfList
 
-ENDP moveBoolElementofList
+PROC mouseAim
+	USES eax, ebx, ecx, edx
+	LOCAL @@x1: dword, @@y1: dword, @@oldx2: dword, @@oldy2: dword, @@b2: dword, @@x2: dword, @@y2: dword, @@dx:dword, @@dy:dword, @@colorBullet:dword
+
+	;Show mouse pointer
+	mov ax, 1
+	int 33h
+
+
+
+    ;Check if array of mouse coordinates is not empty
+	mov eax, offset arrlen_mousecoord
+	cmp [dword ptr eax], 0
+	jne @@start
+
+    ;Check if mouse is not clicked
+    cmp bl, 1
+    jne @@return
+
+    @@start:
+        ;We will make a list containing boolean, xcoord and ycoord: 
+        ;[boolean1, x1, y1, oldboolean2, oldx2, oldy2, boolean2, x2, y2]
+        movzx ebx, bl	                        ; mouse clickstate (1 or 0)
+        movzx ecx, cx                           ; horizontal cursor position
+        movzx edx, dx                           ; vertical cursor position
+        call appendList, offset arrlen_mousecoord, ebx, ecx, edx
+        
+        
+
+        ;First check if it's an array of 12 elements
+        mov ecx, offset arrlen_mousecoord
+        cmp [dword ptr ecx], 12
+        jne @@return
+
+        call moveElementsOfList, offset arrlen_mousecoord
+
+        ;Get elements of list
+        call getOfList, offset arrlen_mousecoord, 2
+        mov [@@x1], eax
+        call getOfList, offset arrlen_mousecoord, 3
+        mov [@@y1], eax
+        call getOfList, offset arrlen_mousecoord, 5
+        mov [@@oldx2], eax
+        call getOfList, offset arrlen_mousecoord, 6
+        mov [@@oldy2], eax
+        call getOfList, offset arrlen_mousecoord, 7
+        mov [@@b2], eax
+        call getOfList, offset arrlen_mousecoord, 8
+        mov [@@x2], eax
+        call getOfList, offset arrlen_mousecoord, 9
+        mov [@@y2], eax
+
+        ;Draw a pixel on the place where the mouse has first clicked
+        call drawPixel, [@@x1], [@@y1], 200
+
+        ;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
+        call getDeltaX, [@@x1], [@@oldx2]
+        mov [@@dx], eax
+        call getDeltaY, [@@y1], [@@oldy2]
+        mov [@@dy], eax
+        call deleteTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
+
+        call getDeltaX, [@@x1], [@@x2]
+        mov [@@dx], eax
+        call getDeltaY, [@@y1], [@@y2]
+        mov [@@dy], eax
+        call drawTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
+
+        ;The state where the mouse is released: [boolean2 back to 0]
+        cmp [@@b2], 1
+        je @@return
+
+        @@throw:
+            ;Hide visible mouse pointer
+            mov ax, 2
+            int 33h 
+
+            ;Hide trajectoryline + hide startpoint 
+            call deleteTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
+            call drawPixel, [@@x1], [@@y1], 0
+
+            ;get color of bullet
+            call getColor, STARTINGX, STARTINGY
+            mov [@@colorBullet], eax
+
+            ;Throw bullet
+            call bulletPath, [@@dx], [@@dy], eax
+
+            ;Reset the array of the mouse coordinates
+            mov ebx, offset arrlen_mousecoord
+            mov [dword ptr ebx], 0
+	@@return:
+	ret
+ENDP mouseAim
+
 
 PROC main
-	sti
-	cld
-	
-	push ds
-	pop	es
+    sti
+    cld
 
-	call	setVideoMode, 13h
-	finit	; initialize FPU
-	
-	call	updateColorpallete
-	call	fillBackground
-	
-	;call drawPixel, 0, 300, 99
-	;call	bulletPath, 45, 45
-	;call	bulletPath, 25, 25
-	
-	;call 	printIntList, offset arrlen_mousecoord
+    push ds
+    pop es
 
-	;Create a list starting from the adress after the adress of arrlen_mousecoord
-	;call	appendList, offset arrlen_mousecoord, 20
-	;call	appendList, offset arrlen_mousecoord, 39
-	;call	appendList, offset arrlen_mousecoord, 44
-	;call	appendList, offset arrlen_mousecoord, 7
-	;call	appendList, offset arrlen_mousecoord, 56
-	;call	appendList, offset arrlen_mousecoord, 92
-	;call	appendList, offset arrlen_mousecoord, 43
-	;call	appendList, offset arrlen_mousecoord, 78
+    call    setVideoMode, 13h
 
-	;call moveElementofList, offset arrlen_mousecoord
-	;call 	printIntList, offset arrlen_mousecoord
-	;call printSignedInteger,[arrlen_mousecoord]
+    call    updateColorpallete, 6
+    startscreen
+    call    fillBackground
 
+    call    drawCursor, 25*FRAQBIT, 25*FRAQBIT, 200
+    call    bullet_init
+	call 	mouse_install, offset mouseAim
 
+    call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
+    call    mouse_uninstall
+    call    terminateProcess
 
-	;X1 is the first element of the list
-	;call get_X1_ofList, offset arrlen_mousecoord
-	;call printSignedInteger, eax
+ENDP main 
 
-	;X2 is the second last element of the list
-	;call get_X2_ofList, offset arrlen_mousecoord
-	;call printSignedInteger, eax
-
-	;Y1 is the second element of the list
-	;call get_Y1_ofList, offset arrlen_mousecoord
-	;call printSignedInteger, eax
-
-	;Y2 is the last element of the list
-	;call get_Y2_ofList, offset arrlen_mousecoord
-	;call printSignedInteger, eax
-
-	;call printSignedInteger,[arrlen_mousecoord] 	;I changed the value of arrlen_mousecoord 
-
-	
-
-		
-	
-	;call 	mouse_install, offset mousehandler
-
-	;call printSignedInteger, 10
-	;call 	mouse_install, offset showcursor
-	;call bulletPath, 45, 45
-	
-	;call drawline, 25, 25, 25, 25
-
-	
-
-	;call 	printIntList, offset arrlen_mousecoord
-	
-	;Draw trajectory with mouse and click on ESC to confirm to shoot
-	;call mousehandling
-
-
-	call 	mouse_install, offset boolean_mouse_dragged
-
-
-
-	;call drawbulletPath, 25, 25, 99
-
-
-
-
-
-	call	waitForSpecificKeystroke, 001Bh	; ESC = 001Bh
-	call 	mouse_uninstall
-	call	terminateProcess
-ENDP main
 ; -------------------------------------------------------------------
 ; DATA
-; -------------------------------------------------------------------
+; ------------------------------------------------------------------- 
 DATASEG
-
-	palette dd 34, 52, 63, 31, 63, 0, 53, 26, 8, 55, 5, 15, 28, 32, 36				; lucht-gras-muur-doelwit-kogel
-	arrlen_mousecoord dd 0
-	
-
-
+    palette         dd 34, 52, 63                           ;sky
+                    dd 31, 63, 0                            ;grass
+                    dd 53, 26, 8                            ;wall
+                    dd 55, 5, 15                            ;target
+                    dd 127, 63, 40                          ;Aimline
+                    dd 32, 32, 32                           ;Bullet
+    StartSCR        db "startscr.bin", 0
+    WinSCR          db "winscr.bin", 0
+    msgStart        db " Press space to play!", 13, 10, '$'
+	msgGround	    db "On the ground!", 13, 10, '$'
+	msgWall	        db "    Miss!     ", 13, 10, '$'
+	msgSucces	    db "   Succes!    ", 13, 10, '$'
+	msgTooHigh	    db "  Too high!   ", 13, 10, '$'
+    msgOutOfBound   db "Out of bound! ", 13, 10, '$'
+    msgWin          db " Press esc to exit", 13, 10, '$'
+    BLANK           db "              ", 13, 10, '$'
+	openErrorMsg    db "could not open file", 13, 10, '$'
+	readErrorMsg    db "could not read data", 13, 10, '$'
+	closeErrorMsg   db "error during file closing", 13, 10, '$'
+    arrlen_mousecoord dd 0
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
 STACK 100h
+
 
 END main
