@@ -840,23 +840,6 @@ PROC deleteTrajectory
     ret
 ENDP deleteTrajectory
 
-PROC drawCursor
-	ARG @@x:dword ,@@y:dword
-	USES eax
-	call drawPixel, [@@x], [@@y], 200
-	sub [@@x], 1*FRAQBIT
-	call drawPixel, [@@x], [@@y], 200
-	add [@@x], 2*FRAQBIT
-	call drawPixel, [@@x], [@@y], 200
-	sub [@@x], 1*FRAQBIT
-	sub [@@y], 1*FRAQBIT
-	call drawPixel, [@@x], [@@y], 200
-	add [@@y], 2*FRAQBIT
-	call drawPixel, [@@x], [@@y], 200
-	ret
-ENDP drawCursor
-
-
 PROC appendList
 	ARG @@arrayptr:dword, @@newB:dword, @@newX:dword, @@newY:dword
 	USES eax, ebx, ecx
