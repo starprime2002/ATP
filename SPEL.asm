@@ -23,18 +23,18 @@ SCRWIDTH EQU 320        ; screen witdth
 SCRHEIGHT EQU 200       ; screen height
 SKYHEIGHT EQU 150
 WALLVERPOS EQU 50
-WALLHORPOS EQU 300
+WALLHORPOS EQU 280
 WALLHEIGHT EQU 100
 WALLWIDTH EQU 12
 TARGETVERPOS EQU 80
-TARGETHORPOS EQU 297
+TARGETHORPOS EQU 277
 TARGETHEIGHT EQU 10
 TARGETWIDTH EQU 5
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
 FRAQBIT EQU 256         ; fractionele bit  
 TIMESTEP EQU 64
 GRAVITY EQU -200*FRAQBIT
-STARTINGX EQU 40*FRAQBIT
+STARTINGX EQU 20*FRAQBIT
 STARTINGY EQU 20*FRAQBIT
 XCONV EQU 2                 ;converts de dx to vstart_x     (vx = dx*XCONV)
 YCONV EQU 2                 ;converts de dy to vstart_y     (vy = dy*YCONV)
@@ -239,7 +239,6 @@ ENDP updateColorpalette
 MACRO startscreen
 
     call processFile, offset StartSCR
-    call displayString, 96, 106, offset msgStart
     call waitForSpecificKeystroke, 20h ; space bar = 001Bh
 
 ENDM startscreen
@@ -908,7 +907,7 @@ PROC getDeltaX
     mov eax, VXMAX
 
     @@next:
-    ;Limit maximum speed
+    ;Limit aimline so it doesn't go outside the screen (illegal writes)
     cmp eax, -1*VXMAX/2
     jge @@end
     mov eax, -1*VXMAX/2
@@ -1013,11 +1012,11 @@ PROC mouseAim
         ;Draw a pixel on the place where the mouse has first clicked
         call getColor, [@@x1], [@@y1]
         cmp eax, 200
-        je @@alper
+        je @@skip
         mov [@@coveredColor], eax
         call drawPixel, [@@x1], [@@y1], 200
 
-        @@alper:
+        @@skip:
         ;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
         call getDeltaX, [@@x1], [@@oldx2]
         mov [@@dx], eax
@@ -1086,7 +1085,7 @@ ENDP main
 ; DATA
 ; ------------------------------------------------------------------- 
 DATASEG
-    position        dd 0, 255, 57, 17, 191, 223, 237, 224, 252, 146, 1
+    position        dd 0, 255, 57, 17, 191, 223, 237, 224, 252, 146, 128
     palette         dd 38, 54, 59                           ;blauw   
                     dd 63, 63, 63                           ;wit
                     dd 9, 44, 19                            ;lgroen

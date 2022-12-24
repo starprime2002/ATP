@@ -98,27 +98,6 @@ PROC printSignedInteger
 	ret
 ENDP printSignedInteger
 
-; Update the colour palette.
-;	* Psource: palette source location
-; 	* Nbytes: number of bytes that should be updated for palette
-; 	* Firstcolor: internal palette offset
-PROC updateColourPalette
-	ARG	 	@@Psource:dword, @@Nbytes: dword, @@Firstcolor:byte
-	USES 	eax, ecx, edx, esi
-
-	mov esi, [@@Psource]
-	mov ecx, [@@Nbytes] ; amount of color bytes to read (movzx = zero extend)
-	
-
-	mov dx, 03C8h 		; DAC write port
-	mov al, [@@Firstcolor]	; index of first color to change
-	out dx, al			; write to IO
-	mov dx, 03C9h 		;
-	rep outsb			; update colors
-
-	ret
-ENDP updateColourPalette
-
 ; Terminate the program.
 PROC terminateProcess
 	USES eax
