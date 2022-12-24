@@ -27,21 +27,21 @@ WALLHORPOS EQU 300
 WALLHEIGHT EQU 100
 WALLWIDTH EQU 12
 TARGETVERPOS EQU 80
-TARGETHORPOS EQU 298
+TARGETHORPOS EQU 297
 TARGETHEIGHT EQU 10
-TARGETWIDTH EQU 4
+TARGETWIDTH EQU 5
 ALLONES EQU 4294967295  ; needed for sign extension before dividing 
-FRAQBIT EQU 128         ; fractionele bit  
+FRAQBIT EQU 256         ; fractionele bit  
 TIMESTEP EQU 64
 GRAVITY EQU -200*FRAQBIT
 STARTINGX EQU 40*FRAQBIT
 STARTINGY EQU 20*FRAQBIT
-XCONV EQU 2                ;converts de dx to vstart_x     (vx = x*XCONV)
-YCONV EQU 2                 ;converts de dy to vstart_y     (vy = x*YCONV)
-FULLPALLETESIZE EQU 768     ; bytes in palette
-COLORCOUNT EQU 128          ; number of unique colors for palette cycling
-PIXELCOUNT EQU 320*200	    ; pixel count
+XCONV EQU 2                 ;converts de dx to vstart_x     (vx = dx*XCONV)
+YCONV EQU 2                 ;converts de dy to vstart_y     (vy = dy*YCONV)
+VXMAX EQU 200*XCONV*FRAQBIT
+VYMAX EQU 125*YCONV*FRAQBIT
 
+;--------------------------------------------------------------------------------------------------------
 CODESEG 
 
 ; Set the video mode 
@@ -148,6 +148,27 @@ PROC printIntList
 	ret
 ENDP printIntList
 
+; Source: Assembling programming compendium
+PROC displayString
+    ARG @@row:DWORD, @@column:DWORD, @@offset:DWORD
+    USES EAX, EBX, EDX
+
+    mov edx, [@@row]            ; row in EDX
+    mov ebx, [@@column]         ; column in EBX
+
+    mov ah, 02h                 ; set cursor position
+    shl edx, 08h                ; row in DH (00H is top)
+    mov dl, bl                  ; column in DL (00H is left)
+    mov bh, 0                   ; page number in BH
+    int 10h                     ; raise interrupt
+
+    mov ah, 09h                 ; write string to standard output
+    mov edx, [@@offset]         ; offset of ’$’-terminated string in EDX
+    int 21h                     ; raise interrupt
+
+    RET
+ENDP displayString
+
 ; Terminate the program. 
 PROC terminateProcess
     USES eax 
@@ -181,68 +202,64 @@ PROC wait_VBLANK
     ret  
 ENDP wait_VBLANK
 
-PROC updateColorpallete
-    ARG @@NumberOfColors:byte
-    USES eax, ebx, edx
+PROC updateColorpalette
+    LOCAL @@paletteptr: dword
+    USES eax, ebx, ecx, edx
 
-    mov ebx, offset palette 
-	mov ah, 0 
+    mov ebx, offset position
+    mov ecx, 11
+    mov [@@paletteptr], offset palette
 
-    @@kleur: 
-        mov DX, 03C8h                       ; DAC write port
-        push eax 
-        mov al, ah 
-        out DX, Al                          ; write to IO
-        pop eax 
+    @@kleur:
+        push ecx
+		mov dx, 03C8h 						; DAC write port
+		mov al, [ebx]
+		out dx, al  						; write to IO
 
-        mov DX, 03C9h                       ; DAC data port
-        mov AL, [ebx]                       ; load red value (6-bit)
-        out DX, AL                          ; write red value
+        mov ecx, [@@paletteptr]
+		mov dx, 03C9h 						; DAC data port
+		mov al, [ecx] 				        ; load red value (6-bit)
+		out dx, al 							; write red value
+		add ecx, 4
+		mov al, [ecx] 						; load green value (6-bit)
+		out dx, al 							; write green value
+		add ecx, 4
+		mov al, [ecx] 						; load blue value (6-bit)
+		out dx, al 							; write blue value
+		add ecx, 4
         add ebx, 4
-        mov AL, [ebx]                       ; load green value (6-bit)
-        out DX, AL                          ; write green value
-        add ebx, 4
-        mov AL, [ebx]                       ; load blue value (6-bit)
-        out DX, AL                          ; write blue value
-        add ebx, 4
 
-        inc ah
-        cmp ah, [@@NumberOfColors]
-        jne @@kleur
+        mov [@@paletteptr], ecx
+        pop ecx
+        loop @@kleur
 
     ret
-ENDP updateColorpallete
+ENDP updateColorpalette
 
-;PROC startscreen
-;    USES   eax 
-;
-;    ret
-;ENDP startscreen
+MACRO startscreen
+
+    call processFile, offset StartSCR
+    call displayString, 96, 106, offset msgStart
+    call waitForSpecificKeystroke, 20h ; space bar = 001Bh
+
+ENDM startscreen
 
 ; Fill the background (for mode 13h): blue sky with grass and a wall
 PROC fillBackground
     USES    eax, ebx, ecx, edx, edi
 
     ; Initialize video memory address.
-    mov edi, VMEMADR                ; edi is destination adress en is dus hier 0A0000h
+    mov edi, VMEMADR                ; edi is destination adress: 0A0000h
 
     ; Draw sky
-    mov ecx, SCRWIDTH*SKYHEIGHT     ; ecx = amount of elements = aantal pixels
-    mov al, 0                       ; indx of the first color to change
-    rep stosb                       ;stosb (byte) =transfer one byte from eax to edi so that edi increases/updates to point to the next datum(that is situated one byte next to the previous)
-
-    ; Draw grass 
-    add edi, ecx
-    mov ecx, SCRWIDTH*(SCRHEIGHT-SKYHEIGHT)
-    mov al, 1
-    rep stosb
+    call processFile, offset Back
     
     ; Draw Wall = rectangle (300, 50)-(309, 149)
     mov edx, 0                                  ; Layer of wall 0-99
     @@drawWall:
         mov eax, WALLVERPOS 
         add eax, edx
-        mov ebx, 320
+        mov ebx, SCRWIDTH
         push edx
         mul ebx
         pop edx
@@ -251,7 +268,7 @@ PROC fillBackground
         mov edi, VMEMADR
         add edi, eax
         mov ecx, WALLWIDTH
-        mov al, 2
+        mov al, 237
         rep stosb
 
         inc edx
@@ -263,7 +280,7 @@ PROC fillBackground
     @@drawTarget:
         mov eax, TARGETVERPOS
         add eax, edx
-        mov ebx, 320
+        mov ebx, SCRWIDTH
         push edx
         mul ebx
         pop edx
@@ -272,7 +289,7 @@ PROC fillBackground
         mov edi, VMEMADR
         add edi, eax
         mov ecx, TARGETWIDTH
-        mov al, 3
+        mov al, 224
         rep stosb
 
         inc edx
@@ -288,7 +305,7 @@ PROC drawPixel                              ; input zijn in fractionele bits
     USES eax, ebx, edx, edi
 
     mov edi, VMEMADR
-    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT
+    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT = (SKYHEIGHT-1)-y_phys/FRAQBIT
     mov eax, [@@ycoord]                 ; Can be both positive or negative
     mov ebx, FRAQBIT
     xor edx, edx
@@ -297,9 +314,9 @@ PROC drawPixel                              ; input zijn in fractionele bits
     mov edx, ALLONES
     @@positive:
     idiv ebx
-    mov ebx, 149
+    mov ebx, SKYHEIGHT-1
     sub ebx, eax
-    mov eax, 320
+    mov eax, SCRWIDTH
     imul ebx
     add edi, eax
     ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
@@ -318,7 +335,7 @@ PROC getColor                              ; input zijn in fractionele bits
     USES ebx, edx, edi
 
     mov edi, VMEMADR
-    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT
+    ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT = (SKYHEIGHT-1)-y_phys/FRAQBIT
     mov eax, [@@ycoord]                 ; Can be both positive or negative
     mov ebx, FRAQBIT
     xor edx, edx
@@ -327,9 +344,9 @@ PROC getColor                              ; input zijn in fractionele bits
     mov edx, ALLONES
     @@positive:
     idiv ebx
-    mov ebx, 149
+    mov ebx, SKYHEIGHT-1
     sub ebx, eax
-    mov eax, 320
+    mov eax, SCRWIDTH
     imul ebx
     add edi, eax
     ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
@@ -362,29 +379,6 @@ PROC updateValue
     ret
 ENDP updateValue
 
-PROC deleteBullet                             ; input zijn in fractionele bits
-    ARG @@Xpos:dword, @@Ypos:dword
-    USES eax, ebx
-
-    mov eax, [@@Xpos]
-    mov ebx, [@@Ypos]
-
-    call drawPixel, eax, ebx, 0
-    add eax, FRAQBIT
-    call drawPixel, eax, ebx, 0
-    sub eax, FRAQBIT
-    add ebx, FRAQBIT
-    call drawPixel, eax, ebx, 0
-    sub ebx, FRAQBIT
-    sub eax, FRAQBIT
-    call drawPixel, eax, ebx, 0
-    add eax, FRAQBIT
-    sub ebx, FRAQBIT
-    call drawPixel, eax, ebx, 0
-
-    ret
-ENDP deleteBullet
-
 PROC drawBullet                             ; input zijn in fractionele bits
     ARG @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
     USES eax, ebx
@@ -395,19 +389,42 @@ PROC drawBullet                             ; input zijn in fractionele bits
 
     call drawPixel, eax, ebx, [@@colorBullet]
     add eax, FRAQBIT
-    call drawPixel, eax, ebx, 5
+    call drawPixel, eax, ebx, 146
     sub eax, FRAQBIT
     add ebx, FRAQBIT
-    call drawPixel, eax, ebx, 5
+    call drawPixel, eax, ebx, 146
     sub ebx, FRAQBIT
     sub eax, FRAQBIT
-    call drawPixel, eax, ebx, 5
+    call drawPixel, eax, ebx, 146
     add eax, FRAQBIT
     sub ebx, FRAQBIT
-    call drawPixel, eax, ebx, 5
+    call drawPixel, eax, ebx, 146
 
     ret
 ENDP drawBullet
+
+PROC deleteBullet                             ; input zijn in fractionele bits
+    ARG @@Xpos:dword, @@Ypos:dword
+    USES eax, ebx
+
+    mov eax, [@@Xpos]
+    mov ebx, [@@Ypos]
+
+    call drawPixel, eax, ebx, 191
+    add eax, FRAQBIT
+    call drawPixel, eax, ebx, 191
+    sub eax, FRAQBIT
+    add ebx, FRAQBIT
+    call drawPixel, eax, ebx, 191
+    sub ebx, FRAQBIT
+    sub eax, FRAQBIT
+    call drawPixel, eax, ebx, 191
+    add eax, FRAQBIT
+    sub ebx, FRAQBIT
+    call drawPixel, eax, ebx, 191
+
+    ret
+ENDP deleteBullet
 
 PROC bullet_init
     USES eax
@@ -419,9 +436,9 @@ PROC bullet_init
     ret
 ENDP bullet_init
 
-; Checks    if the bullet collided with wall or ground
+; Checks    if the bullet collided with wall, ground or target
 ;           if the bullet is out of border
-PROC checkCollision                                     ;te optimisere
+PROC checkCollision
     ARG @@xpos:dword, @@ypos:dword RETURNS ecx
     USES eax, ebx, edx
 
@@ -433,7 +450,7 @@ PROC checkCollision                                     ;te optimisere
         mov eax, 1*FRAQBIT
         sub edx, eax
         call getColor, ebx, edx
-        cmp eax, 1
+        cmp eax, 57
         jne @@targetCheck
         mov ecx, 1
         jmp @@collisionEnd
@@ -444,7 +461,7 @@ PROC checkCollision                                     ;te optimisere
         mov eax, 1*FRAQBIT
         add ebx, eax
         call getColor, ebx, edx
-        cmp eax, 3
+        cmp eax, 224
         jne @@wallCheck
         mov ecx, 2
         jmp @@collisionEnd
@@ -455,7 +472,7 @@ PROC checkCollision                                     ;te optimisere
         mov eax, 1*FRAQBIT
         add ebx, eax
         call getColor, ebx, edx
-        cmp eax, 2
+        cmp eax, 237
         jne @@onTheWallCheck
         mov ecx, 3
         jmp @@collisionEnd
@@ -466,7 +483,7 @@ PROC checkCollision                                     ;te optimisere
         mov eax, 1*FRAQBIT
         sub edx, eax
         call getColor, ebx, edx
-        cmp eax, 2
+        cmp eax, 237
         jne @@upperCheck
         mov ecx, 4
         jmp @@collisionEnd
@@ -525,61 +542,69 @@ PROC replaceBullet
     cmp ecx, 7
     je @@rightLimitCase
 
-    ; Hé Alec lees dit aub: dus ge zit kheb hier een paar deletebullets gecomment omda het misschien beter is om
-    ; de gemiste bullet te laten zoda de missers ziet en de random kleure extra aandacht krijge
-    ; als je de ";" weg haalt gaat er nx kapot (normaal gezien (¬‿¬ ))
 
     @@groundCase:
         call drawBullet, [@@Xpos], 1*FRAQBIT, [@@colorBullet]
-        call printString, offset msgGround
+        call displayString, 84, 110, offset msgGround
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, [@@Xpos], 1*FRAQBIT
+        call displayString, 84, 110, offset BLANK
+        call deleteBullet, [@@Xpos], 1*FRAQBIT
         jmp @@endReplacement
         
     @@targetCase:
         call drawBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
-        call printString, offset msgSucces
+        call displayString, 84, 109, offset msgSucces
+        mov [@@waittime], 100
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
-        jmp @@endReplacement
+        call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
+        call processFile, offset WinSCR
+        call displayString, 97, 106, offset msgWin
+        jmp @@endNoReplacement
 
     @@wallCase:
         call drawBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos], [@@colorBullet]
-        call printString, offset msgWall
+        call displayString, 84, 109, offset msgWall
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos]
+        call displayString, 84, 109, offset BLANK
+        call deleteBullet, (WALLHORPOS-2)*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
         
     @@onTheWallCase:
         call drawBullet, [@@Xpos], (149-WALLVERPOS+2)*FRAQBIT, [@@colorBullet]    
-        call printString, offset msgWall
+        call displayString, 84, 109, offset msgWall
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, [@@Xpos], 101*FRAQBIT
+        call displayString, 84, 109, offset BLANK
+        call deleteBullet, [@@Xpos], 101*FRAQBIT
         jmp @@endReplacement
 
     @@upperLimitCase:
         call drawBullet, [@@Xpos], 148*FRAQBIT, [@@colorBullet]
-        call printString, offset msgTooHigh
+        call displayString, 84, 109, offset msgTooHigh
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, [@@Xpos], 148*FRAQBIT
+        call displayString, 84, 109, offset BLANK
+        call deleteBullet, [@@Xpos], 148*FRAQBIT
         jmp @@endReplacement
     
     @@leftLimitCase:
         call drawBullet, 1*FRAQBIT, [@@Ypos], [@@colorBullet]
-        call printString, offset msgOutOfBound
+        call displayString, 84, 109, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, 1*FRAQBIT, [@@Ypos]
+        call displayString, 84, 109, offset BLANK
+        call deleteBullet, 1*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
 
     @@rightLimitCase:
         call drawBullet, 318*FRAQBIT, [@@Ypos], [@@colorBullet]
-        call printString, offset msgOutOfBound
+        call displayString, 84, 109, offset msgOutOfBound
         call wait_VBLANK, [@@waittime]
-        ;call deleteBullet, 318*FRAQBIT, [@@Ypos]
+        call displayString, 84, 109, offset BLANK
+        call deleteBullet, 318*FRAQBIT, [@@Ypos]
         jmp @@endReplacement
 
     @@endReplacement:
+        call fillBackground
         call bullet_init
+    @@endNoReplacement:
 
     ret
 ENDP replaceBullet
@@ -619,10 +644,10 @@ PROC bulletPath
         call updateValue, [@@vy], [@@ay], [@@dt]
         mov [@@vy], eax
 
+
         call checkCollision, [@@xpos], [@@ypos]
         cmp ecx, 0
         jne @@endPath
-
     
         ;Bring back old coordinations
         pop ebx
@@ -650,7 +675,7 @@ PROC bulletPath
 ENDP bulletPath 
 
 ;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
-PROC drawCube                              ; input zijn in fractionele bits
+PROC drawCube                               ; input zijn in fractionele bits
     ARG @@xcoord:dword ,@@ycoord:dword
     USES eax, ebx, ecx
 
@@ -658,36 +683,36 @@ PROC drawCube                              ; input zijn in fractionele bits
     mov ecx, [@@ycoord]
 
     call getColor, ebx, ecx
-    cmp al, 0
+    cmp al, 191
     jne @@next1
-	call drawPixel, ebx, ecx, 4
+	call drawPixel, ebx, ecx, 252
 
     @@next1:
     add ebx, 1*FRAQBIT
     call getColor, ebx, ecx
-    cmp al, 0
+    cmp al, 191
     jne @@next2
-	call drawPixel, ebx, ecx, 4
-    
+	call drawPixel, ebx, ecx, 252
+
     @@next2:
     sub ecx, 1*FRAQBIT
     call getColor, ebx, ecx
-    cmp al, 0
+    cmp al, 191
     jne @@next3
-	call drawPixel, ebx, ecx, 4
-    
+	call drawPixel, ebx, ecx, 252
+
     @@next3:
     sub ebx, 1*FRAQBIT
     call getColor, ebx, ecx
-    cmp al, 0
+    cmp al, 191
     jne @@end
-	call drawPixel, ebx, ecx, 4
+	call drawPixel, ebx, ecx, 252
 
     @@end:
     ret
 ENDP drawCube
 
-PROC deleteCube                              ; input zijn in fractionele bits
+PROC deleteCube                             ; input zijn in fractionele bits
     ARG @@xcoord:dword ,@@ycoord:dword
     USES eax, ebx, ecx
 
@@ -695,30 +720,30 @@ PROC deleteCube                              ; input zijn in fractionele bits
     mov ecx, [@@ycoord]
 
     call getColor, ebx, ecx
-    cmp al, 4
+    cmp al, 252
     jne @@next1
-	call drawPixel, ebx, ecx, 0
+	call drawPixel, ebx, ecx, 191
 
     @@next1:
     add ebx, 1*FRAQBIT
     call getColor, ebx, ecx
-    cmp al, 4
+    cmp al, 252
     jne @@next2
-	call drawPixel, ebx, ecx, 0
-    
+	call drawPixel, ebx, ecx, 191
+
     @@next2:
     sub ecx, 1*FRAQBIT
     call getColor, ebx, ecx
-    cmp al, 4
+    cmp al, 252
     jne @@next3
-	call drawPixel, ebx, ecx, 0
-    
+	call drawPixel, ebx, ecx, 191
+
     @@next3:
     sub ebx, 1*FRAQBIT
     call getColor, ebx, ecx
-    cmp al, 4
+    cmp al, 252
     jne @@end
-	call drawPixel, ebx, ecx, 0
+	call drawPixel, ebx, ecx, 191
 
     @@end:
     ret
@@ -740,7 +765,7 @@ PROC drawTrajectory
     mov [@@vy], ebx
     mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
-    mov ecx, 4
+    mov ecx, 3
     @@drawloop:
         push ecx
 	    mov ecx, TIMESTEP/16
@@ -764,6 +789,7 @@ PROC drawTrajectory
         pop ecx
         loop @@drawloop
 
+    @@end:
     ret
 ENDP drawTrajectory
 
@@ -783,7 +809,7 @@ PROC deleteTrajectory
     mov [@@vy], ebx
     mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
 
-    mov ecx, 4
+    mov ecx, 3
     @@drawloop:
         push ecx
 	    mov ecx, TIMESTEP/16
@@ -876,10 +902,16 @@ PROC getDeltaX
     mov ebx, XCONV
     imul ebx
 
+    ;Limit maximum speed
+    cmp eax, VXMAX
+    jle @@next
+    mov eax, VXMAX
 
-    cmp eax, -STARTINGX
+    @@next:
+    ;Limit maximum speed
+    cmp eax, -1*VXMAX/2
     jge @@end
-    mov eax, -STARTINGX
+    mov eax, -1*VXMAX/2
 
     @@end:
 	ret
@@ -897,9 +929,17 @@ PROC getDeltaY
     mov ebx, YCONV
     imul ebx
 
+    ;Limit maximum speed
+    cmp eax, VYMAX
+    jle @@end
+    mov eax, VYMAX
+
+    @@end:
 	ret
 ENDP getDeltaY
 
+;When the list contains 12 elements, the 6 last elements are moved 3 elements to the front making the list a list of 9 elements
+;For example: [boolean1, x1, y1, boolean2, x2, y2, boolean3, x3, y3, boolean4, x4, y4] => [boolean1, x1, y1, boolean3, x3, y3, boolean4, x4, y4]
 PROC moveElementsOfList
 	ARG @@arrayptr:dword
 	USES eax, ebx, ecx
@@ -923,29 +963,32 @@ ENDP moveElementsOfList
 
 PROC mouseAim
 	USES eax, ebx, ecx, edx
-	LOCAL @@x1: dword, @@y1: dword, @@oldx2: dword, @@oldy2: dword, @@b2: dword, @@x2: dword, @@y2: dword, @@dx:dword, @@dy:dword, @@colorBullet:dword
+	LOCAL @@x1: dword, @@y1: dword, @@oldx2: dword, @@oldy2: dword, @@b2: dword, @@x2: dword, @@y2: dword, @@dx:dword, @@dy:dword, @@colorBullet: dword, @@coveredColor: dword
+
 
 	;Show mouse pointer
 	mov ax, 1
 	int 33h
 
+    ;Check if array of mouse coordinates is not empty
 	mov eax, offset arrlen_mousecoord
 	cmp [dword ptr eax], 0
 	jne @@start
+
+    ;Check if mouse is not clicked
     cmp bl, 1
     jne @@return
 
     @@start:
         ;We will make a list containing boolean, xcoord and ycoord: 
-        ;   [boolean1, x1, y1, oldboolean2, oldx2, oldy2, boolean2, x2, y2]
+        ;[boolean1, x1, y1, oldboolean2, oldx2, oldy2, boolean2, x2, y2]
         movzx ebx, bl	                        ; mouse clickstate (1 or 0)
         movzx ecx, cx                           ; horizontal cursor position
         movzx edx, dx                           ; vertical cursor position
         call appendList, offset arrlen_mousecoord, ebx, ecx, edx
-
+        
         ;First check if it's an array of 12 elements
         mov ecx, offset arrlen_mousecoord
-        ;call printSignedInteger, [dword ptr ecx]
         cmp [dword ptr ecx], 12
         jne @@return
 
@@ -968,8 +1011,13 @@ PROC mouseAim
         mov [@@y2], eax
 
         ;Draw a pixel on the place where the mouse has first clicked
+        call getColor, [@@x1], [@@y1]
+        cmp eax, 200
+        je @@alper
+        mov [@@coveredColor], eax
         call drawPixel, [@@x1], [@@y1], 200
 
+        @@alper:
         ;Tranfrom the mousecoordinates into coordinates for the trajectory of the throw
         call getDeltaX, [@@x1], [@@oldx2]
         mov [@@dx], eax
@@ -994,7 +1042,8 @@ PROC mouseAim
 
             ;Hide trajectoryline + hide startpoint 
             call deleteTrajectory, STARTINGX, STARTINGY, [@@dx], [@@dy]
-            call drawPixel, [@@x1], [@@y1], 0
+            mov eax, [@@coveredColor]
+            call drawPixel, [@@x1], [@@y1], eax
 
             ;get color of bullet
             call getColor, STARTINGX, STARTINGY
@@ -1003,11 +1052,13 @@ PROC mouseAim
             ;Throw bullet
             call bulletPath, [@@dx], [@@dy], eax
 
+            ;Reset the array of the mouse coordinates
             mov ebx, offset arrlen_mousecoord
             mov [dword ptr ebx], 0
 	@@return:
 	ret
 ENDP mouseAim
+
 
 PROC main
     sti
@@ -1017,14 +1068,16 @@ PROC main
     pop es
 
     call    setVideoMode, 13h
+    call    updateColorpalette
 
-    call    updateColorpallete, 6
-    call    fillBackground, offset image_file
+    startscreen
+    call    fillBackground
+
     call    bullet_init
-
 	call 	mouse_install, offset mouseAim
+
     call    waitForSpecificKeystroke, 001Bh ; ESC = 001Bh
-    ;MOET ge ni als ge klaar zijt ook de mouse uninstall??? er is een functie daarvoor in MOUSE.ASM
+    call    mouse_uninstall
     call    terminateProcess
 
 ENDP main 
@@ -1033,32 +1086,38 @@ ENDP main
 ; DATA
 ; ------------------------------------------------------------------- 
 DATASEG
+    position        dd 0, 255, 57, 17, 191, 223, 237, 224, 252, 146, 1
+    palette         dd 38, 54, 59                           ;blauw   
+                    dd 63, 63, 63                           ;wit
+                    dd 9, 44, 19                            ;lgroen
+                    dd 0, 32, 16                            ;dgroen
+                    dd 38, 54, 59                           ;blauw
+                    dd 52, 60, 61                           ;lblauw
+                    dd 53, 26, 8                            ;bruin
+                    dd 63, 0, 0                             ;rood
+                    dd 63, 63, 0                            ;geel
+                    dd 32, 32, 32                           ;grijs
+                    dd 0, 0, 0                              ;zwart
+    StartSCR        db "startscr.bin", 0
+    Back            db "back.bin", 0
+    WinSCR          db "winscr.bin", 0
+    msgStart        db " Press space to play!", 13, 10, '$'
 	msgGround	    db "On the ground!", 13, 10, '$'
-	msgWall	        db "Miss!", 13, 10, '$'
-	msgSucces	    db "Succes!", 13, 10, '$'
-	msgTooHigh	    db "Too high!", 13, 10, '$'
-    msgOutOfBound   db "Out of bound!", 13, 10, '$'
-    palette         dd 34, 52, 63                           ;sky
-                    dd 31, 63, 0                            ;grass
-                    dd 53, 26, 8                            ;wall
-                    dd 55, 5, 15                            ;target
-                    dd 127, 63, 40                           ;Aimline
-                    dd 32, 32, 32                           ;Bullet
-	image_file db "winscr.bin", 0
-	openErrorMsg db "could not open file", 13, 10, '$'
-	readErrorMsg db "could not read data", 13, 10, '$'
-	closeErrorMsg db "error during file closing", 13, 10, '$'
+	msgWall	        db "    Miss!     ", 13, 10, '$'
+	msgSucces	    db "   Succes!    ", 13, 10, '$'
+	msgTooHigh	    db "  Too high!   ", 13, 10, '$'
+    msgOutOfBound   db "Out of bound! ", 13, 10, '$'
+    msgWin          db " Press esc to exit", 13, 10, '$'
+    BLANK           db "              ", 13, 10, '$'
+	openErrorMsg    db "could not open file", 13, 10, '$'
+	readErrorMsg    db "could not read data", 13, 10, '$'
+	closeErrorMsg   db "error during file closing", 13, 10, '$'
     arrlen_mousecoord dd 0
-    arrMousecoord dw 9 dup (?)
-; -------------------------------------------------------------------
-UDATASEG
-	imagedata db PIXELCOUNT dup (?)
-; -------------------------------------------------------------------
-
+	arr_mousecoord    dw 12 dup (?)
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
 STACK 100h
 
 
-END main 
+END main

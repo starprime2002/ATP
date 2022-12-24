@@ -55,6 +55,49 @@ PROC terminateAfterKeystroke
 		call terminateProcess
 ENDP terminateAfterKeystroke
 
+PROC printSignedInteger
+	ARG	@@printval:dword
+	USES eax, ebx, ecx, edx
+
+	mov eax, [@@printval]
+    test eax, eax	; Check for sign
+	jns skipSign
+	push eax
+	mov	ah, 2h     	; Print '-' if the sign is set.
+    mov dl, '-'
+	int	21h
+	pop eax
+	neg eax	; negate eax
+	
+	skipSign:
+	mov	ebx, 10		; divider
+	xor ecx, ecx	; counter for digits to be printed
+
+	; Store digits on stack
+	getNextDigit:
+	inc	ecx         ; increase digit counter
+	xor edx, edx
+	div	ebx   		; divide by 10
+	push dx			; store remainder on stack
+	test eax, eax	; check whether zero?
+	jnz	getNextDigit
+
+    ; Write all digits to the standard output
+	mov	ah, 2h 		; Function for printing single characters.
+	printDigits:		
+	pop dx
+	add	dl,'0'      	; Add 30h => code for a digit in the ASCII table, ...
+	int	21h            	; Print the digit to the screen, ...
+	loop printDigits	; Until digit counter = 0.
+	
+	mov	dl, 0Dh		; Carriage return.
+	int	21h
+	mov	dl, 0Ah		; New line.
+	int 21h
+
+	ret
+ENDP printSignedInteger
+
 ; Update the colour palette.
 ;	* Psource: palette source location
 ; 	* Nbytes: number of bytes that should be updated for palette
@@ -108,6 +151,7 @@ PROC processFile
 	mov ah, 3fh
 	int 21h
 
+
 	mov  edx, offset readErrorMsg
 	jc @@print_error
 	
@@ -119,10 +163,13 @@ PROC processFile
 	jc @@print_error
 	
 	; copy to video buffer, update palette
-	mov esi, offset imagedata
+	mov eax, offset imagedata
+	add eax, 5
+	mov esi, eax
 	mov edi, VMEMADR
 	mov ecx, PIXELCOUNT
 	rep movsb
+
 	ret
 
 	@@print_error:
@@ -137,10 +184,12 @@ ENDP processFile
 
 
 DATASEG
+    StartSCR db "smiley.bin", 0
+    Back            db "back.bin", 0
+	WinSCR db "winscr.bin", 0
 	openErrorMsg db "could not open file", 13, 10, '$'
 	readErrorMsg db "could not read data", 13, 10, '$'
 	closeErrorMsg db "error during file closing", 13, 10, '$'
-
 ; -------------------------------------------------------------------
 UDATASEG
 	palette	db FULLPALLETESIZE dup (?)
