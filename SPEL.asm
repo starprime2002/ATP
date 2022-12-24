@@ -112,16 +112,6 @@ PROC printSignedInteger
 	ret
 ENDP printSignedInteger
 
-PROC printString
-    ARG @@string:dword
-    USES eax, edx
-        mov ah, 09h
-        mov edx, [@@string]
-        int 21h
-
-	ret
-ENDP printString
-
 PROC printIntList
 	ARG	@@arrayptr:dword
 	USES eax, ebx, ecx, edx
@@ -147,6 +137,16 @@ PROC printIntList
 	@@endPrintIntList:
 	ret
 ENDP printIntList
+
+PROC printString
+    ARG @@string:dword
+    USES eax, edx
+        mov ah, 09h
+        mov edx, [@@string]
+        int 21h
+
+	ret
+ENDP printString
 
 ; Source: Assembling programming compendium
 PROC displayString
@@ -180,7 +180,7 @@ PROC terminateProcess
     ret 
 ENDP terminateProcess 
 
-; Procedure wait_VBLANK van EXAMPLES\DANCER genomen 
+; Procedure wait_VBLANK taken from EXAMPLES\DANCER 
 ; wait for @@framecount frames 
 PROC wait_VBLANK
     ARG @@framecount: word 
@@ -236,6 +236,7 @@ PROC updateColorpalette
     ret
 ENDP updateColorpalette
 
+;Displays a startscreen and waits till spacebar is pressed
 MACRO startscreen
 
     call processFile, offset StartSCR
@@ -243,17 +244,14 @@ MACRO startscreen
 
 ENDM startscreen
 
-; Fill the background (for mode 13h): blue sky with grass and a wall
+; Image Back loaded + wall and target drawn on top of it
 PROC fillBackground
     USES    eax, ebx, ecx, edx, edi
 
-    ; Initialize video memory address.
-    mov edi, VMEMADR                ; edi is destination adress: 0A0000h
-
-    ; Draw sky
+    ; Draws background
     call processFile, offset Back
     
-    ; Draw Wall = rectangle (300, 50)-(309, 149)
+    ; Draw Wall = rectangle (WALLHORPOS, 149-WALLVERPOS)-(WALLHORPOS+WALLWIDTH, 149-WALLVERPOS-WALLHEIGHT)
     mov edx, 0                                  ; Layer of wall 0-99
     @@drawWall:
         mov eax, WALLVERPOS 
@@ -274,7 +272,7 @@ PROC fillBackground
         cmp edx, WALLHEIGHT
         jne @@drawWall
 
-    ; Draw target = rectangle (300, 50)-(309, 149)
+    ; Draw target = rectangle (TARGETHORPOS, 149-TARGETVERPOS)-(TARGETHORPOS+TARGETWALLWIDTH, 149-TARGETVERPOS-TARGETHEIGHT)
     mov edx, 0                                  ; Layer of Target
     @@drawTarget:
         mov eax, TARGETVERPOS
@@ -298,12 +296,13 @@ PROC fillBackground
     ret
 ENDP fillBackground
 
-;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
-PROC drawPixel                              ; input zijn in fractionele bits
+;write pixel in a our (x,y) cartesian coordinate system with the origin far left above grond
+PROC drawPixel                              ; inputs have FRAQBIT units
     ARG @@xcoord:dword ,@@ycoord:dword, @@color:byte
     USES eax, ebx, edx, edi
 
     mov edi, VMEMADR
+
     ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT = (SKYHEIGHT-1)-y_phys/FRAQBIT
     mov eax, [@@ycoord]                 ; Can be both positive or negative
     mov ebx, FRAQBIT
@@ -318,6 +317,7 @@ PROC drawPixel                              ; input zijn in fractionele bits
     mov eax, SCRWIDTH
     imul ebx
     add edi, eax
+
     ;Change of coordinate system for x   x_draw = x_phys/FRAQBIT
     mov eax, [@@xcoord]                     ;can only be positive
     mov ebx, FRAQBIT
@@ -329,11 +329,12 @@ PROC drawPixel                              ; input zijn in fractionele bits
     ret
 ENDP drawPixel
 
-PROC getColor                              ; input zijn in fractionele bits
+PROC getColor                               ; inputs have FRAQBIT units
     ARG @@xcoord:dword ,@@ycoord:dword RETURNS al
     USES ebx, edx, edi
 
     mov edi, VMEMADR
+    
     ;Change of coordinate system for y   y_draw = 149-y_phys/FRAQBIT = (SKYHEIGHT-1)-y_phys/FRAQBIT
     mov eax, [@@ycoord]                 ; Can be both positive or negative
     mov ebx, FRAQBIT
@@ -378,11 +379,10 @@ PROC updateValue
     ret
 ENDP updateValue
 
-PROC drawBullet                             ; input zijn in fractionele bits
+PROC drawBullet                             ; inputs have FRAQBIT units
     ARG @@Xpos:dword, @@Ypos:dword, @@colorBullet:dword
     USES eax, ebx
 
-    ;Delete previous bullet
     mov eax, [@@Xpos]
     mov ebx, [@@Ypos]
 
@@ -402,7 +402,7 @@ PROC drawBullet                             ; input zijn in fractionele bits
     ret
 ENDP drawBullet
 
-PROC deleteBullet                             ; input zijn in fractionele bits
+PROC deleteBullet                           ; inputs have FRAQBIT units
     ARG @@Xpos:dword, @@Ypos:dword
     USES eax, ebx
 
@@ -424,6 +424,168 @@ PROC deleteBullet                             ; input zijn in fractionele bits
 
     ret
 ENDP deleteBullet
+
+;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
+PROC drawCube                               ; inputs have FRAQBIT units
+    ARG @@xcoord:dword ,@@ycoord:dword
+    USES eax, ebx, ecx
+
+    mov ebx, [@@xcoord]
+    mov ecx, [@@ycoord]
+
+    call getColor, ebx, ecx
+    cmp al, 191
+    jne @@next1
+	call drawPixel, ebx, ecx, 252
+
+    @@next1:
+    add ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 191
+    jne @@next2
+	call drawPixel, ebx, ecx, 252
+
+    @@next2:
+    sub ecx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 191
+    jne @@next3
+	call drawPixel, ebx, ecx, 252
+
+    @@next3:
+    sub ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 191
+    jne @@end
+	call drawPixel, ebx, ecx, 252
+
+    @@end:
+    ret
+ENDP drawCube
+
+PROC deleteCube                             ; inputs have FRAQBIT units
+    ARG @@xcoord:dword ,@@ycoord:dword
+    USES eax, ebx, ecx
+
+    mov ebx, [@@xcoord]
+    mov ecx, [@@ycoord]
+
+    call getColor, ebx, ecx
+    cmp al, 252
+    jne @@next1
+	call drawPixel, ebx, ecx, 191
+
+    @@next1:
+    add ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 252
+    jne @@next2
+	call drawPixel, ebx, ecx, 191
+
+    @@next2:
+    sub ecx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 252
+    jne @@next3
+	call drawPixel, ebx, ecx, 191
+
+    @@next3:
+    sub ebx, 1*FRAQBIT
+    call getColor, ebx, ecx
+    cmp al, 252
+    jne @@end
+	call drawPixel, ebx, ecx, 191
+
+    @@end:
+    ret
+ENDP deleteCube
+
+PROC drawTrajectory
+	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
+	USES eax, ebx, ecx
+
+	mov eax, [@@dx]
+	mov ebx, [@@dy]
+
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
+	;Startingposition
+    mov [@@xpos], STARTINGX         ;[distance unit] 
+    mov [@@ypos], STARTINGY         ;[distance unit]
+    mov [@@vx], eax                 ;[pixels/time]
+    mov [@@vy], ebx
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
+
+    mov ecx, 3
+    @@drawloop:
+        push ecx
+	    mov ecx, TIMESTEP/16
+		@@tijdsloop:
+			;xpos += vx*dt
+			call updateValue, [@@xpos], [@@vx], [@@dt]
+			mov [@@xpos], eax
+			;ypos += vy*dt
+			call updateValue, [@@ypos], [@@vy], [@@dt]
+			mov [@@ypos], eax
+			;vy += ay*dt 
+			call updateValue, [@@vy], [@@ay], [@@dt]
+			mov [@@vy], eax
+
+			loop @@tijdsloop
+
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+        call drawCube, eax, ebx
+
+        pop ecx
+        loop @@drawloop
+
+    @@end:
+    ret
+ENDP drawTrajectory
+
+PROC deleteTrajectory
+	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
+    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
+	USES eax, ebx, ecx
+
+	mov eax, [@@dx]
+	mov ebx, [@@dy]
+
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
+	;Startingposition
+    mov [@@xpos], STARTINGX         ;[distance unit] 
+    mov [@@ypos], STARTINGY         ;[distance unit]
+    mov [@@vx], eax                 ;[pixels/time]
+    mov [@@vy], ebx
+    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
+
+    mov ecx, 3
+    @@drawloop:
+        push ecx
+	    mov ecx, TIMESTEP/16
+		@@tijdsloop:
+			;xpos += vx*dt
+			call updateValue, [@@xpos], [@@vx], [@@dt]
+			mov [@@xpos], eax
+			;ypos += vy*dt
+			call updateValue, [@@ypos], [@@vy], [@@dt]
+			mov [@@ypos], eax
+			;vy += ay*dt 
+			call updateValue, [@@vy], [@@ay], [@@dt]
+			mov [@@vy], eax
+
+			loop @@tijdsloop
+
+		mov eax, [@@xpos]
+		mov ebx, [@@ypos]
+        call deleteCube, eax, ebx
+
+        pop ecx
+        loop @@drawloop
+
+    ret
+ENDP deleteTrajectory
 
 PROC bullet_init
     USES eax
@@ -454,7 +616,7 @@ PROC checkCollision
         mov ecx, 1
         jmp @@collisionEnd
 
-    @@targetCheck:                        ; Wall = (300,0)-(309,99)
+    @@targetCheck:
         mov ebx, [@@xpos]
         mov edx, [@@ypos]
         mov eax, 1*FRAQBIT
@@ -465,7 +627,7 @@ PROC checkCollision
         mov ecx, 2
         jmp @@collisionEnd
 
-    @@wallCheck:                        ; Wall = (300,0)-(309,99)
+    @@wallCheck:
         mov ebx, [@@xpos]
         mov edx, [@@ypos]
         mov eax, 1*FRAQBIT
@@ -476,7 +638,7 @@ PROC checkCollision
         mov ecx, 3
         jmp @@collisionEnd
 
-    @@onTheWallCheck:                        ; Wall = (300,0)-(309,99)
+    @@onTheWallCheck:
         mov ebx, [@@xpos]
         mov edx, [@@ypos]
         mov eax, 1*FRAQBIT
@@ -607,23 +769,24 @@ PROC replaceBullet
     ret
 ENDP replaceBullet
 
-;Initialize a throw
+;Initiates a throw
 PROC bulletPath
     ARG @@vx_0:dword, @@vy_0:dword, @@colorBullet:dword
     LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
     USES eax, ebx, ecx, edx
 
-    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
-	;Startingposition
-    mov [@@xpos], STARTINGX        ;[distance unit] 
-    mov [@@ypos], STARTINGY        ;[distance unit]
-    mov eax, [@@vx_0]            ;[distance/time]
-    mov [@@vx], eax                 ;[pixels/time]
-    mov eax, [@@vy_0]            ;[distance/time]
-    mov [@@vy], eax
-    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
+    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse besause we will divide by dt
 
-    ;Nodig om voor later
+	;Startingposition
+    mov [@@xpos], STARTINGX         ;[#Fraqtional bits] 
+    mov [@@ypos], STARTINGY         ;[#Fraqtional bits]
+    mov eax, [@@vx_0]
+    mov [@@vx], eax                 ;[#Fraqtional bit/time]
+    mov eax, [@@vy_0]
+    mov [@@vy], eax                 ;[#Fraqtional bit/time]
+    mov [@@ay], GRAVITY         	;[#Fraqtional bit/time²] downward accelaration due to "gravity"
+
+    ;Store old coordinates
     mov eax, [@@xpos]
     mov ebx, [@@ypos]
     push eax
@@ -650,6 +813,7 @@ PROC bulletPath
         ;Bring back old coordinations
         pop ebx
         pop eax
+        ;displace bullet
         call deleteBullet, eax, ebx
         call drawBullet, [@@xpos], [@@ypos], [@@colorBullet]
         
@@ -659,7 +823,7 @@ PROC bulletPath
         push eax
         push ebx
 
-        ;Animation
+        ;Animationtime
         call wait_VBLANK, 1                     ; [*10ms] animation purposes
                                                 ; = FRAQBITS time unit
         jmp @@tijdsloop 
@@ -671,168 +835,6 @@ PROC bulletPath
         call replaceBullet, ecx, eax, ebx, [@@colorBullet]
     ret 
 ENDP bulletPath 
-
-;write pixel in a standard (x,y) cartesian coordinate system with the origin far left above grond
-PROC drawCube                               ; input zijn in fractionele bits
-    ARG @@xcoord:dword ,@@ycoord:dword
-    USES eax, ebx, ecx
-
-    mov ebx, [@@xcoord]
-    mov ecx, [@@ycoord]
-
-    call getColor, ebx, ecx
-    cmp al, 191
-    jne @@next1
-	call drawPixel, ebx, ecx, 252
-
-    @@next1:
-    add ebx, 1*FRAQBIT
-    call getColor, ebx, ecx
-    cmp al, 191
-    jne @@next2
-	call drawPixel, ebx, ecx, 252
-
-    @@next2:
-    sub ecx, 1*FRAQBIT
-    call getColor, ebx, ecx
-    cmp al, 191
-    jne @@next3
-	call drawPixel, ebx, ecx, 252
-
-    @@next3:
-    sub ebx, 1*FRAQBIT
-    call getColor, ebx, ecx
-    cmp al, 191
-    jne @@end
-	call drawPixel, ebx, ecx, 252
-
-    @@end:
-    ret
-ENDP drawCube
-
-PROC deleteCube                             ; input zijn in fractionele bits
-    ARG @@xcoord:dword ,@@ycoord:dword
-    USES eax, ebx, ecx
-
-    mov ebx, [@@xcoord]
-    mov ecx, [@@ycoord]
-
-    call getColor, ebx, ecx
-    cmp al, 252
-    jne @@next1
-	call drawPixel, ebx, ecx, 191
-
-    @@next1:
-    add ebx, 1*FRAQBIT
-    call getColor, ebx, ecx
-    cmp al, 252
-    jne @@next2
-	call drawPixel, ebx, ecx, 191
-
-    @@next2:
-    sub ecx, 1*FRAQBIT
-    call getColor, ebx, ecx
-    cmp al, 252
-    jne @@next3
-	call drawPixel, ebx, ecx, 191
-
-    @@next3:
-    sub ebx, 1*FRAQBIT
-    call getColor, ebx, ecx
-    cmp al, 252
-    jne @@end
-	call drawPixel, ebx, ecx, 191
-
-    @@end:
-    ret
-ENDP deleteCube
-
-PROC drawTrajectory
-	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
-    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
-	USES eax, ebx, ecx
-
-	mov eax, [@@dx]
-	mov ebx, [@@dy]
-
-    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
-	;Startingposition
-    mov [@@xpos], STARTINGX         ;[distance unit] 
-    mov [@@ypos], STARTINGY         ;[distance unit]
-    mov [@@vx], eax                 ;[pixels/time]
-    mov [@@vy], ebx
-    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
-
-    mov ecx, 3
-    @@drawloop:
-        push ecx
-	    mov ecx, TIMESTEP/16
-		@@tijdsloop:
-			;xpos += vx*dt
-			call updateValue, [@@xpos], [@@vx], [@@dt]
-			mov [@@xpos], eax
-			;ypos += vy*dt
-			call updateValue, [@@ypos], [@@vy], [@@dt]
-			mov [@@ypos], eax
-			;vy += ay*dt 
-			call updateValue, [@@vy], [@@ay], [@@dt]
-			mov [@@vy], eax
-
-			loop @@tijdsloop
-
-		mov eax, [@@xpos]
-		mov ebx, [@@ypos]
-        call drawCube, eax, ebx
-
-        pop ecx
-        loop @@drawloop
-
-    @@end:
-    ret
-ENDP drawTrajectory
-
-PROC deleteTrajectory
-	ARG @@x1:dword, @@y1:dword, @@dx:dword, @@dy:dword
-    LOCAL @@dt:dword, @@xpos:dword, @@ypos:dword, @@vx:dword, @@vy:dword, @@ay:dword
-	USES eax, ebx, ecx
-
-	mov eax, [@@dx]
-	mov ebx, [@@dy]
-
-    mov [@@dt], TIMESTEP            ; [1/time unit] we work with the inverse to dodge decimal points
-	;Startingposition
-    mov [@@xpos], STARTINGX         ;[distance unit] 
-    mov [@@ypos], STARTINGY         ;[distance unit]
-    mov [@@vx], eax                 ;[pixels/time]
-    mov [@@vy], ebx
-    mov [@@ay], GRAVITY         	;[distance/time²] downward accelaration due to "gravity"
-
-    mov ecx, 3
-    @@drawloop:
-        push ecx
-	    mov ecx, TIMESTEP/16
-		@@tijdsloop:
-			;xpos += vx*dt
-			call updateValue, [@@xpos], [@@vx], [@@dt]
-			mov [@@xpos], eax
-			;ypos += vy*dt
-			call updateValue, [@@ypos], [@@vy], [@@dt]
-			mov [@@ypos], eax
-			;vy += ay*dt 
-			call updateValue, [@@vy], [@@ay], [@@dt]
-			mov [@@vy], eax
-
-			loop @@tijdsloop
-
-		mov eax, [@@xpos]
-		mov ebx, [@@ypos]
-        call deleteCube, eax, ebx
-
-        pop ecx
-        loop @@drawloop
-
-    ret
-ENDP deleteTrajectory
 
 PROC appendList
 	ARG @@arrayptr:dword, @@newB:dword, @@newX:dword, @@newY:dword
