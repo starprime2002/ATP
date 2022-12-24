@@ -557,7 +557,6 @@ PROC replaceBullet
         call wait_VBLANK, [@@waittime]
         call deleteBullet, (TARGETHORPOS-2)*FRAQBIT, [@@Ypos]
         call processFile, offset WinSCR
-        call displayString, 97, 106, offset msgWin
         jmp @@endNoReplacement
 
     @@wallCase:
@@ -1100,17 +1099,12 @@ DATASEG
     StartSCR        db "startscr.bin", 0
     Back            db "back.bin", 0
     WinSCR          db "winscr.bin", 0
-    msgStart        db " Press space to play!", 13, 10, '$'
 	msgGround	    db "On the ground!", 13, 10, '$'
 	msgWall	        db "    Miss!     ", 13, 10, '$'
 	msgSucces	    db "   Succes!    ", 13, 10, '$'
 	msgTooHigh	    db "  Too high!   ", 13, 10, '$'
     msgOutOfBound   db "Out of bound! ", 13, 10, '$'
-    msgWin          db " Press esc to exit", 13, 10, '$'
     BLANK           db "              ", 13, 10, '$'
-	openErrorMsg    db "could not open file", 13, 10, '$'
-	readErrorMsg    db "could not read data", 13, 10, '$'
-	closeErrorMsg   db "error during file closing", 13, 10, '$'
     arrlen_mousecoord dd 0
 	arr_mousecoord    dw 12 dup (?)
 ; -------------------------------------------------------------------
